@@ -6,6 +6,7 @@ using UnityEngine.UIElements;
 public class TerrainHandler : MonoBehaviour
 {
     public Transform viewer;
+    public Texture2D terrainSpritemap;
     [Range(1,50)]
     public int chunkWidth = 10, chunkHeight = 10;
     [Range(-50,-1)]
@@ -13,7 +14,51 @@ public class TerrainHandler : MonoBehaviour
     public float featureSize = 16;
 
     Dictionary<Vector2, TerrainChunk> chunkDictionary = new Dictionary<Vector2, TerrainChunk>();
+    [Range(1,20)]
     public int xViewDist = 10, yViewDist = 10;
+
+    Vector3[] vertices;
+    Vector2[] uv;
+    // Temporary method used for creating vertices and indices for chunks
+    private void Start()
+    {
+        //Calculate texture to use (64 and 96 are arbitrary values)
+        float textureOffsetX = 64f / (float)terrainSpritemap.width;
+        float textureOffsetY = 96f / (float)terrainSpritemap.height;
+
+        //Set width of tiles based on tilemap
+        float tileWidth = 16 / (float)terrainSpritemap.width;
+        float tileHeight = 16 / (float)terrainSpritemap.height;
+
+        //Create empty vertices and uv with size of (Chunk Area) * (Number of vertices per quad)
+        vertices = new Vector3[chunkWidth * chunkHeight * 4];
+        uv = new Vector2[vertices.Length];
+        for (int i = 0, y = 0; y < chunkHeight; y++)
+        {
+            for (int x = 0; x < chunkWidth; x++)
+            {
+                //Bottom Left
+                vertices[i] = new Vector3(x, y);
+                uv[i] = new Vector2(textureOffsetX, textureOffsetY);
+
+                //Bottom Right
+                vertices[i + 1] = new Vector3(x + 1, y);
+                uv[i + 1] = new Vector2(textureOffsetX + tileWidth, textureOffsetY);
+
+                //Top Left
+                vertices[i + 2] = new Vector3(x, y + 1);
+                uv[i + 2] = new Vector2(textureOffsetX, textureOffsetY + tileHeight);
+
+                //Top Right
+                vertices[i + 3] = new Vector3(x + 1, y + 1);
+                uv[i + 3] = new Vector2(textureOffsetX + tileWidth, textureOffsetY + tileHeight);
+
+                //Increment index
+                i += 4;
+            }
+        }
+    }
+    List<Vector2> keysToRemove = new List<Vector2>();
     void Update()
     {
         //Calculate current x and y position of player
@@ -49,21 +94,28 @@ public class TerrainHandler : MonoBehaviour
                 }
                 else
                 {
-                    TerrainChunk chunk = new TerrainChunk(transform, chunkCoord, chunkWidth, chunkHeight, featureSize);
+                    TerrainChunk chunk = new TerrainChunk(transform, vertices, uv, terrainSpritemap, chunkCoord, chunkWidth, chunkHeight, featureSize);
                     chunkDictionary.Add(chunkCoord, chunk);
                 }
             }
         }
 
-        //Loop through all chunks in list. If chunk should be removed then destroy the GameObject containing its mesh
-        //and set chunk loaded = false
-        foreach (TerrainChunk c in chunkDictionary.Values)
+        //Loop through all chunks in list. If chunk should be removed then disable the GameObject 
+        //containing its mesh, set loaded = false, and add key to remove chunk from chunkDictionary
+        keysToRemove.Clear();
+        foreach(Vector2 key in chunkDictionary.Keys)
         {
+            TerrainChunk c = chunkDictionary[key];
             if (c.ShouldRemove())
             {
-                Destroy(c.GetGameObject());
                 c.Remove();
+                keysToRemove.Add(key);
             }
+        }
+        //Remove terrain chunk from chunkDictionary to save memory
+        foreach(Vector2 key in keysToRemove)
+        {
+            chunkDictionary.Remove(key);
         }
     }
 }
