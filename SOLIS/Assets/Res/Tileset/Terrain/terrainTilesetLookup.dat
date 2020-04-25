@@ -1,0 +1,16 @@
+Grass={64,64}
+
+TopEdge={64,128}
+BottomEdge={64,0}
+LeftEdge={0,64}
+RightEdge={128,64}
+
+CornerTL={0,128}
+CornerTR={128,128}
+CornerBL={0,0}
+CornerBR={128,0}
+
+CurveTL={192,128}
+CurveTR={256,128}
+CurveBL={192,64}
+CurveBR={256,64}

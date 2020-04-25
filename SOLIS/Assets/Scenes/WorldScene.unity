@@ -413,11 +413,14 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   viewer: {fileID: 1382242789}
-  terrainSpritemap: {fileID: 2800000, guid: fb77e1c905a0f824195b7ac4eb831c87, type: 3}
-  chunkWidth: 10
-  chunkHeight: 10
+  terrainSpritemap: {fileID: 2800000, guid: a3e4737e226cadf4eacab09eb13ce343, type: 3}
+  chunkWidth: 20
+  chunkHeight: 20
   startX: -30
   startY: -30
   featureSize: 256
-  xViewDist: 10
-  yViewDist: 10
+  xViewDist: 6
+  yViewDist: 4
+  tilesetLookupFile: {fileID: 102900000, guid: 923cc6959e369244d8f09e634182b024, type: 3}
+  tilesetTriangulationFile: {fileID: 102900000, guid: 4f65c66d7a9c49942b3436caa5036518,
+    type: 3}
