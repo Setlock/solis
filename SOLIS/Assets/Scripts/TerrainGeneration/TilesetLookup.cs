@@ -10,17 +10,22 @@ public class TilesetLookup
 {
     string posFilename = "";
     string triangulationFilename = "";
-    Dictionary<string, Vector2> posDictionary = new Dictionary<string, Vector2>();
+    int tileWidth, tileHeight;
+    Dictionary<string, Vector2Int> posDictionary = new Dictionary<string, Vector2Int>();
     Dictionary<string, string> triangulationDictionary = new Dictionary<string, string>();
     public TilesetLookup(string posFilename, string triangulationFilename)
     {
         this.posFilename = posFilename;
         this.triangulationFilename = triangulationFilename;
-        //CreateDictionaries();
+        CreateDictionaries();
     }
     private void CreateDictionaries()
     {
         StreamReader reader = new StreamReader(posFilename);
+        String firstline = reader.ReadLine();
+        int commaPos = firstline.IndexOf(",");
+        tileWidth = int.Parse(firstline.Substring(0, commaPos));
+        tileHeight = int.Parse(firstline.Substring(commaPos + 1));
         while (!reader.EndOfStream)
         {
             string line = reader.ReadLine();
@@ -35,7 +40,7 @@ public class TilesetLookup
                 string yString = line.Substring(comma+1, (endBracket-comma)-1);
                 int xPos = int.Parse(xString);
                 int yPos = int.Parse(yString);
-                Vector2 pos = new Vector2(xPos, yPos);
+                Vector2Int pos = new Vector2Int(xPos*tileWidth, yPos*tileHeight);
                 posDictionary.Add(name, pos);
             }
         }
@@ -52,14 +57,22 @@ public class TilesetLookup
             }
         }
     }
-    public Vector2 GetPosition(string name)
+    public Vector2Int GetPosition(string name)
     {
-        Vector2 output = new Vector2(0, 0);
+        Vector2Int output = new Vector2Int(0, 0);
         if (posDictionary.ContainsKey(name))
         {
             output = posDictionary[name];
         }
         return output;
+    }
+    public int getTileWidth()
+    {
+        return this.tileWidth;
+    }
+    public int getTileHeight()
+    {
+        return this.tileHeight;
     }
     public string GetName(string binary)
     {
@@ -69,24 +82,5 @@ public class TilesetLookup
             output = triangulationDictionary[binary];
         }
         return output;
-        /*foreach(string key in triangulationDictionary.Keys)
-        {
-            bool found = true;
-            for(int i = 0; i < key.Length; i++)
-            {
-                if (!key.Substring(i, 1).Equals("2"))
-                {
-                    if(!key.Substring(i, 1).Equals(binary.Substring(i, 1)))
-                    {
-                        found = false;
-                    }
-                }
-            }
-            if (found)
-            {
-                output = triangulationDictionary[key];
-            }
-        }
-        return output;*/
     }
 }

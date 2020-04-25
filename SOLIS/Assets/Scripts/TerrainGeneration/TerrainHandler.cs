@@ -6,11 +6,14 @@ public class TerrainHandler : MonoBehaviour
 {
     public Transform viewer;
     public Texture2D terrainSpritemap;
+    public GameObject liquid;
     [Range(1,50)]
     public int chunkWidth = 10, chunkHeight = 10;
     [Range(-50,-1)]
     public int startX = -1, startY = -1;
+    public int tileWidth = 1, tileHeight = 1;
     public float featureSize = 16;
+    int viewChunkWidth, viewChunkHeight;
 
     Dictionary<Vector2, TerrainChunk> chunkDictionary = new Dictionary<Vector2, TerrainChunk>();
     [Range(1,20)]
@@ -26,6 +29,7 @@ public class TerrainHandler : MonoBehaviour
     {
         tilesetLookup = new TilesetLookup(AssetDatabase.GetAssetPath(tilesetLookupFile),AssetDatabase.GetAssetPath(tilesetTriangulationFile));
         System.Random r = new System.Random();
+        //liquid.GetComponent<SpriteRenderer>().color = new Color((float)r.NextDouble(), (float)r.NextDouble(), (float)r.NextDouble(), 1);
         Color groundColor = new Color((float)r.NextDouble(), (float)r.NextDouble(), (float)r.NextDouble(), 1);
         /*Calculate texture to use (64 and 96 are arbitrary values)
         float textureOffsetX = 64f / (float)terrainSpritemap.width;
@@ -40,9 +44,12 @@ public class TerrainHandler : MonoBehaviour
         vertices = new Vector3[chunkWidth * chunkHeight * 4];
         uv = new Vector2[vertices.Length];
         colors = new Color[vertices.Length];
-        for (int i = 0, y = 0; y < chunkHeight; y++)
+
+        viewChunkWidth = chunkWidth * tileWidth;
+        viewChunkHeight = chunkHeight * tileHeight;
+        for (int i = 0, y = 0; y < viewChunkHeight; y+=tileWidth)
         {
-            for (int x = 0; x < chunkWidth; x++)
+            for (int x = 0; x < viewChunkWidth; x+=tileHeight)
             {
                 //Bottom Left
                 vertices[i] = new Vector3(x, y);
@@ -50,17 +57,17 @@ public class TerrainHandler : MonoBehaviour
                 //uv[i] = new Vector2(textureOffsetX, textureOffsetY);
 
                 //Bottom Right
-                vertices[i + 1] = new Vector3(x + 1, y);
+                vertices[i + 1] = new Vector3(x + tileWidth, y);
                 colors[i + 1] = groundColor;
                 //uv[i + 1] = new Vector2(textureOffsetX + tileWidth, textureOffsetY);
 
                 //Top Left
-                vertices[i + 2] = new Vector3(x, y + 1);
+                vertices[i + 2] = new Vector3(x, y + tileHeight);
                 colors[i + 2] = groundColor;
                 //uv[i + 2] = new Vector2(textureOffsetX, textureOffsetY + tileHeight);
 
                 //Top Right
-                vertices[i + 3] = new Vector3(x + 1, y + 1);
+                vertices[i + 3] = new Vector3(x + tileWidth, y + tileHeight);
                 colors[i + 3] = groundColor;
                 //uv[i + 3] = new Vector2(textureOffsetX + tileWidth, textureOffsetY + tileHeight);
 
@@ -73,8 +80,8 @@ public class TerrainHandler : MonoBehaviour
     private void FixedUpdate()
     {
         //Calculate current x and y position of player
-        int currentX = Mathf.RoundToInt(viewer.position.x / (float)chunkWidth);
-        int currentY = Mathf.RoundToInt(viewer.position.y / (float)chunkHeight);
+        int currentX = Mathf.RoundToInt(viewer.position.x / (float)viewChunkWidth);
+        int currentY = Mathf.RoundToInt(viewer.position.y / (float)viewChunkHeight);
 
         //Assume all chunks should be removed
         foreach (TerrainChunk c in chunkDictionary.Values)
@@ -89,6 +96,7 @@ public class TerrainHandler : MonoBehaviour
             {
                 //Get chunk coordinate
                 Vector2 chunkCoord = new Vector2((currentX + x) * chunkWidth, (currentY + y) * chunkHeight);
+                Vector2 viewChunkCoord = new Vector2((currentX + x) * viewChunkWidth, (currentY + y) * viewChunkHeight);
                 //If chunk with this coordinate has previously been added set shouldRemove = false and if chunk is not loaded, load chunk
                 //Else create new chunk at this positon and add to list of all chunks
                 if (chunkDictionary.ContainsKey(chunkCoord))
@@ -105,7 +113,7 @@ public class TerrainHandler : MonoBehaviour
                 }
                 else
                 {
-                    TerrainChunk chunk = new TerrainChunk(transform, vertices, uv, terrainSpritemap, tilesetLookup, chunkCoord, chunkWidth, chunkHeight, featureSize, colors);
+                    TerrainChunk chunk = new TerrainChunk(transform, vertices, uv, terrainSpritemap, tilesetLookup, chunkCoord, viewChunkCoord, chunkWidth, chunkHeight, featureSize, colors);
                     //Generate newly created terrain chunk
                     chunk.GenerateMesh();
                     chunkDictionary.Add(chunkCoord, chunk);

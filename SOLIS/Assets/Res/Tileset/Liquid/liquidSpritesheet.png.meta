@@ -17,6 +17,51 @@ TextureImporter:
   - first:
       213: 8863701514624009473
     second: liquidSpritesheet_4
+  - first:
+      213: 6720009983160668473
+    second: liquidSpritesheet_5
+  - first:
+      213: -6968503073220409285
+    second: liquidSpritesheet_6
+  - first:
+      213: 2415738615965583079
+    second: liquidSpritesheet_7
+  - first:
+      213: 2145761563114903004
+    second: liquidSpritesheet_8
+  - first:
+      213: 7719492432819561237
+    second: liquidSpritesheet_9
+  - first:
+      213: 6244669638548257679
+    second: liquidSpritesheet_10
+  - first:
+      213: -4931029351842596119
+    second: liquidSpritesheet_11
+  - first:
+      213: 2452068932615899169
+    second: liquidSpritesheet_12
+  - first:
+      213: -195223235298301699
+    second: liquidSpritesheet_13
+  - first:
+      213: -8103363644698887041
+    second: liquidSpritesheet_14
+  - first:
+      213: 7204660955274098548
+    second: liquidSpritesheet_15
+  - first:
+      213: 4769636160424779093
+    second: liquidSpritesheet_16
+  - first:
+      213: 3242789179622629118
+    second: liquidSpritesheet_17
+  - first:
+      213: -2320909666212660362
+    second: liquidSpritesheet_18
+  - first:
+      213: -5687719361735410443
+    second: liquidSpritesheet_19
   externalObjects: {}
   serializedVersion: 11
   mipmaps:
@@ -56,11 +101,11 @@ TextureImporter:
   lightmap: 0
   compressionQuality: 50
   spriteMode: 2
-  spriteExtrude: 1
+  spriteExtrude: 0
   spriteMeshType: 0
   alignment: 0
   spritePivot: {x: 0.5, y: 0.5}
-  spritePixelsToUnits: 128
+  spritePixelsToUnits: 32
   spriteBorder: {x: 0, y: 0, z: 0, w: 0}
   spriteGenerateFallbackPhysicsShape: 1
   alphaUsage: 1
@@ -76,7 +121,7 @@ TextureImporter:
   platformSettings:
   - serializedVersion: 3
     buildTarget: DefaultTexturePlatform
-    maxTextureSize: 2048
+    maxTextureSize: 512
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 0
@@ -88,7 +133,7 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 3
     buildTarget: Standalone
-    maxTextureSize: 2048
+    maxTextureSize: 512
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 0
@@ -100,7 +145,7 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 3
     buildTarget: Windows Store Apps
-    maxTextureSize: 2048
+    maxTextureSize: 512
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 0
@@ -112,7 +157,7 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 3
     buildTarget: iPhone
-    maxTextureSize: 2048
+    maxTextureSize: 512
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 0
@@ -124,7 +169,7 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 3
     buildTarget: Android
-    maxTextureSize: 2048
+    maxTextureSize: 512
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 0
@@ -136,7 +181,7 @@ TextureImporter:
     forceMaximumCompressionQuality_BC6H_BC7: 0
   - serializedVersion: 3
     buildTarget: WebGL
-    maxTextureSize: 2048
+    maxTextureSize: 512
     resizeAlgorithm: 0
     textureFormat: -1
     textureCompression: 0

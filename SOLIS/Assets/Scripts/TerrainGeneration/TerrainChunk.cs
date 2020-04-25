@@ -15,7 +15,7 @@ public class TerrainChunk
     bool remove = false;
     GameObject myObject;
     Mesh mesh;
-    Vector2 position;
+    Vector2 position, viewPosition;
     int width, height;
     float featureSize;
     Texture2D spritemap;
@@ -24,7 +24,7 @@ public class TerrainChunk
     Vector3[] vertices;
     Vector2[] uv;
     Color[] colors;
-    public TerrainChunk(Transform parent, Vector3[] vertices, Vector2[] uv, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, int width, int height, float featureSize, Color[] colors)
+    public TerrainChunk(Transform parent, Vector3[] vertices, Vector2[] uv, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors)
     {
         this.parent = parent;
         this.vertices = vertices;
@@ -32,6 +32,7 @@ public class TerrainChunk
         this.spritemap = spritemap;
         this.tilesetLookup = tilesetLookup;
         this.position = position;
+        this.viewPosition = viewPosition;
         this.width = width;
         this.height = height;
         this.featureSize = featureSize;
@@ -47,11 +48,11 @@ public class TerrainChunk
         //Set parent for organization in Editor
         myObject.transform.parent = parent;
         //Set positon to be relative to given terrain chunk position
-        myObject.transform.position = new Vector3(position.x, position.y);
+        myObject.transform.position = new Vector3(viewPosition.x, viewPosition.y);
 
         //Create empty mesh object with unique name
         mesh = new Mesh();
-        mesh.name = "Chunk Mesh" + position;
+        mesh.name = "Chunk Mesh" + viewPosition;
         //Create list to add triangles
         List<int> trianglesList = new List<int>();
 
@@ -72,12 +73,12 @@ public class TerrainChunk
             {
                 //Add vertex location to draw 2 triangles
                 trianglesList.Add(vi);
-                trianglesList.Add(vi+2);
-                trianglesList.Add(vi+1);
+                trianglesList.Add(vi + 2);
+                trianglesList.Add(vi + 1);
 
-                trianglesList.Add(vi+1);
-                trianglesList.Add(vi+2);
-                trianglesList.Add(vi+3);
+                trianglesList.Add(vi + 1);
+                trianglesList.Add(vi + 2);
+                trianglesList.Add(vi + 3);
                 tileState = true;
             }
             //Add tile data for position
@@ -252,8 +253,8 @@ public class TerrainChunk
     /// </summary>
     public void UpdateTileUV()
     {
-        float tileWidth = 64 / (float)spritemap.width;
-        float tileHeight = 64 / (float)spritemap.height;
+        float tileWidth = tilesetLookup.getTileWidth() / (float)spritemap.width;
+        float tileHeight = tilesetLookup.getTileHeight() / (float)spritemap.height;
         foreach (TileData tileData in tileDictionary.Values)
         {
             if (tileData.GetVertexIndex() != -1)
@@ -271,70 +272,58 @@ public class TerrainChunk
 
                 //Vector2 uvCoord = tilesetLookup.GetPosition(tilesetLookup.GetName(binaryState));
                 int vi = tileData.GetVertexIndex();
-                Vector2 uvCoord = new Vector2(64f, 64f);
-
+                string tileName = "Grass";
                 //NOTE: ALL VALUES ARE SELECTED BASED ON GIVEN SPRITEMAP
                 //THIS WILL CHANGE IN THE FUTURE TO BE AUTOMATICALLY CREATED RATHER THAN HARDCODED
                 if (tileT != null && !tileT.GetState())
                 {
-                    uvCoord.x = 64;
-                    uvCoord.y = 128;
+                    tileName = "TopEdge";
                     if (tileR != null && !tileR.GetState())
                     {
-                        uvCoord.x = 128;
-                        uvCoord.y = 128;
+                        tileName = "CornerTR";
                     }
                     else if (tileL != null && !tileL.GetState())
                     {
-                        uvCoord.x = 0;
-                        uvCoord.y = 128;
+                        tileName = "CornerTL";
                     }
                 }
                 else if (tileB != null && !tileB.GetState())
                 {
-                    uvCoord.x = 64;
-                    uvCoord.y = 0;
+                    tileName = "BottomEdge";
                     if (tileR != null && !tileR.GetState())
                     {
-                        uvCoord.x = 128;
-                        uvCoord.y = 0;
+                        tileName = "CornerBR";
                     }
                     else if (tileL != null && !tileL.GetState())
                     {
-                        uvCoord.x = 0;
-                        uvCoord.y = 0;
+                        tileName = "CornerBL";
                     }
                 }
                 else if (tileR != null && !tileR.GetState())
                 {
-                    uvCoord.x = 128;
-                    uvCoord.y = 64;
+                    tileName = "RightEdge";
                 }
                 else if (tileL != null && !tileL.GetState())
                 {
-                    uvCoord.x = 0;
-                    uvCoord.y = 64;
+                    tileName = "LeftEdge";
                 }
                 else if (tileBR != null && !tileBR.GetState())
                 {
-                    uvCoord.x = 192;
-                    uvCoord.y = 128;
+                    tileName = "CurveTL";
                 }
                 else if (tileTR != null && !tileTR.GetState())
                 {
-                    uvCoord.x = 192;
-                    uvCoord.y = 64;
+                    tileName = "CurveBL";
                 }
                 else if (tileBL != null && !tileBL.GetState())
                 {
-                    uvCoord.x = 256;
-                    uvCoord.y = 128;
+                    tileName = "CurveTR";
                 }
                 else if (tileTL != null && !tileTL.GetState())
                 {
-                    uvCoord.x = 256;
-                    uvCoord.y = 64;
+                    tileName = "CurveBR";
                 }
+                Vector2 uvCoord = tilesetLookup.GetPosition(tileName);
                 float textureOffsetX = uvCoord.x / (float)spritemap.width;
                 float textureOffsetY = uvCoord.y / (float)spritemap.height;
 
