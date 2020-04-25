@@ -20,10 +20,13 @@ public class TerrainHandler : MonoBehaviour
     public DefaultAsset tilesetLookupFile, tilesetTriangulationFile;
     Vector3[] vertices;
     Vector2[] uv;
+    Color[] colors;
     // Temporary method used for creating vertices and indices for chunks
     private void Start()
     {
         tilesetLookup = new TilesetLookup(AssetDatabase.GetAssetPath(tilesetLookupFile),AssetDatabase.GetAssetPath(tilesetTriangulationFile));
+        System.Random r = new System.Random();
+        Color groundColor = new Color((float)r.NextDouble(), (float)r.NextDouble(), (float)r.NextDouble(), 1);
         /*Calculate texture to use (64 and 96 are arbitrary values)
         float textureOffsetX = 64f / (float)terrainSpritemap.width;
         float textureOffsetY = 64f / (float)terrainSpritemap.height;
@@ -36,24 +39,29 @@ public class TerrainHandler : MonoBehaviour
         //NOTE: UVS NOT SET TO IMPROVE STARTUP TIME-THIS MAY CHANGE IN THE FUTURE
         vertices = new Vector3[chunkWidth * chunkHeight * 4];
         uv = new Vector2[vertices.Length];
+        colors = new Color[vertices.Length];
         for (int i = 0, y = 0; y < chunkHeight; y++)
         {
             for (int x = 0; x < chunkWidth; x++)
             {
                 //Bottom Left
                 vertices[i] = new Vector3(x, y);
+                colors[i] = groundColor;
                 //uv[i] = new Vector2(textureOffsetX, textureOffsetY);
 
                 //Bottom Right
                 vertices[i + 1] = new Vector3(x + 1, y);
+                colors[i + 1] = groundColor;
                 //uv[i + 1] = new Vector2(textureOffsetX + tileWidth, textureOffsetY);
 
                 //Top Left
                 vertices[i + 2] = new Vector3(x, y + 1);
+                colors[i + 2] = groundColor;
                 //uv[i + 2] = new Vector2(textureOffsetX, textureOffsetY + tileHeight);
 
                 //Top Right
                 vertices[i + 3] = new Vector3(x + 1, y + 1);
+                colors[i + 3] = groundColor;
                 //uv[i + 3] = new Vector2(textureOffsetX + tileWidth, textureOffsetY + tileHeight);
 
                 //Increment index
@@ -97,7 +105,7 @@ public class TerrainHandler : MonoBehaviour
                 }
                 else
                 {
-                    TerrainChunk chunk = new TerrainChunk(transform, vertices, uv, terrainSpritemap, tilesetLookup, chunkCoord, chunkWidth, chunkHeight, featureSize);
+                    TerrainChunk chunk = new TerrainChunk(transform, vertices, uv, terrainSpritemap, tilesetLookup, chunkCoord, chunkWidth, chunkHeight, featureSize, colors);
                     //Generate newly created terrain chunk
                     chunk.GenerateMesh();
                     chunkDictionary.Add(chunkCoord, chunk);

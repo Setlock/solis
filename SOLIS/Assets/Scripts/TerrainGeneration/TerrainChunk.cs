@@ -23,7 +23,8 @@ public class TerrainChunk
     public Dictionary<Vector2, TileData> tileDictionary = new Dictionary<Vector2, TileData>();
     Vector3[] vertices;
     Vector2[] uv;
-    public TerrainChunk(Transform parent, Vector3[] vertices, Vector2[] uv, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, int width, int height, float featureSize)
+    Color[] colors;
+    public TerrainChunk(Transform parent, Vector3[] vertices, Vector2[] uv, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, int width, int height, float featureSize, Color[] colors)
     {
         this.parent = parent;
         this.vertices = vertices;
@@ -34,6 +35,7 @@ public class TerrainChunk
         this.width = width;
         this.height = height;
         this.featureSize = featureSize;
+        this.colors = colors;
     }
     /// <summary>
     /// Generate new GameObject for terrain chunk that contains mesh of tiles
@@ -50,7 +52,6 @@ public class TerrainChunk
         //Create empty mesh object with unique name
         mesh = new Mesh();
         mesh.name = "Chunk Mesh" + position;
-
         //Create list to add triangles
         List<int> trianglesList = new List<int>();
 
@@ -110,6 +111,7 @@ public class TerrainChunk
         Material mat = new Material(Shader.Find("Universal Render Pipeline/2D/Sprite-Lit-Default"));
         //Set material texture to use terrain spritemap
         mat.mainTexture = spritemap;
+        mesh.colors = colors;
         //Set Mesh material to created material
         myObject.GetComponent<MeshRenderer>().sharedMaterial = mat;
         //Optimize mesh
