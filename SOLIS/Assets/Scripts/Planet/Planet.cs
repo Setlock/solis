@@ -5,8 +5,9 @@ using UnityEngine;
 
 public class Planet : MonoBehaviour
 {
-    public TerrainHandler terrainHandler;
+    public GameObject terrainHandler;
     public PlanetSettings planetSettings;
+    public Material terrainMat;
     [HideInInspector]
     public bool settingsFoldout;
     [HideInInspector]
@@ -24,6 +25,10 @@ public class Planet : MonoBehaviour
     public void Start()
     {
         Init();
+    }
+    public void StaticBatch()
+    {
+        StaticBatchingUtility.Combine(gameObject);
     }
     /// <summary>
     /// Create initial planet components including tilesetlookup, noise object, and texture
@@ -109,9 +114,11 @@ public class Planet : MonoBehaviour
     /// </summary>
     public void CreateChunk(Vector2 chunkCoord, Vector2 viewChunkCoord, Vector3[] vertices)
     {
-        TerrainChunk chunk = new TerrainChunk(noise, transform, vertices, new Vector2[vertices.Length], terrainSpritemap, tilesetLookup, chunkCoord, viewChunkCoord, planetSettings.chunkWidth, planetSettings.chunkHeight, planetSettings.planetFeatureSize, new Color[vertices.Length], planetSettings.terrainColor);
+        TerrainChunk chunk = new TerrainChunk(terrainMat, noise, transform, vertices, new Vector2[vertices.Length], terrainSpritemap, tilesetLookup, chunkCoord, viewChunkCoord, planetSettings.chunkWidth, planetSettings.chunkHeight, planetSettings.planetFeatureSize, new Color[vertices.Length], planetSettings.terrainColor);
         chunk.GenerateMesh();
         chunkDictionary.Add(chunkCoord, chunk);
+
+        StaticBatch();
     }
     /// <summary>
     /// Remove chunk from dictionary at given location

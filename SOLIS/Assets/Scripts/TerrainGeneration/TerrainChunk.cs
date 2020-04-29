@@ -20,9 +20,10 @@ public class TerrainChunk
     Color[] colors;
     Color mainColor;
     SimplexNoiseGenerator noise;
-
-    public TerrainChunk(SimplexNoiseGenerator noise, Transform parent, Vector3[] vertices, Vector2[] uv, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors, Color mainColor)
+    Material terrainMat;
+    public TerrainChunk(Material terrainMat, SimplexNoiseGenerator noise, Transform parent, Vector3[] vertices, Vector2[] uv, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors, Color mainColor)
     {
+        this.terrainMat = terrainMat;
         this.noise = noise;
         this.parent = parent;
         this.vertices = vertices;
@@ -44,6 +45,8 @@ public class TerrainChunk
     {
         //Create GameObject with unique name and mesh components
         myObject = new GameObject("Terrain Chunk" + position, typeof(MeshFilter), typeof(MeshRenderer));
+        myObject.isStatic = true;
+        //myObject.isStatic = true;
         //Set parent for organization in Editor
         myObject.transform.parent = parent;
         //Set positon to be relative to given terrain chunk position
@@ -116,12 +119,9 @@ public class TerrainChunk
         mesh.triangles = trianglesList.ToArray();
         mesh.colors = colors;
 
-        //Set material of mesh to a new material using default sprite shader
-        Material mat = new Material(Shader.Find("Universal Render Pipeline/2D/Sprite-Lit-Default"));
         //Set material texture to use terrain spritemap
-        mat.mainTexture = spritemap;
         //Set Mesh material to created material
-        myObject.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        myObject.GetComponent<MeshRenderer>().sharedMaterial = terrainMat;
         myObject.GetComponent<MeshRenderer>().sortingOrder = 2;
         //Optimize mesh
         mesh.Optimize();
