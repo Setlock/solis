@@ -1,12 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.ComponentModel.Design;
-using System.Linq;
-using TMPro;
 using UnityEngine;
-using UnityEngine.PlayerLoop;
-using UnityEngine.Tilemaps;
-using UnityEngine.UIElements;
 
 public class TerrainChunk
 {
@@ -24,8 +18,12 @@ public class TerrainChunk
     Vector3[] vertices;
     Vector2[] uv;
     Color[] colors;
-    public TerrainChunk(Transform parent, Vector3[] vertices, Vector2[] uv, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors)
+    Color mainColor;
+    SimplexNoiseGenerator noise;
+
+    public TerrainChunk(SimplexNoiseGenerator noise, Transform parent, Vector3[] vertices, Vector2[] uv, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors, Color mainColor)
     {
+        this.noise = noise;
         this.parent = parent;
         this.vertices = vertices;
         this.uv = uv;
@@ -37,6 +35,7 @@ public class TerrainChunk
         this.height = height;
         this.featureSize = featureSize;
         this.colors = colors;
+        this.mainColor = mainColor;
     }
     /// <summary>
     /// Generate new GameObject for terrain chunk that contains mesh of tiles
@@ -61,12 +60,13 @@ public class TerrainChunk
         int xPos = 0;
         int yPos = 0;
         //Loop through all vertices adding vertex to triangles array at correct location
+        System.Random r = new System.Random();
         while (vi < vertices.Length)
         {
             //Get current tile position
             Vector3 pos = new Vector3((position.x + xPos) / featureSize, (position.y + yPos) / featureSize);
             //Get value from Simplex Noise
-            float val = Noise.Simplex2D(pos, 2).value;
+            float val = (float)noise.noise(pos.x, pos.y, pos.z);
             //Check if value is above some arbitrary number if it is then draw that quad
             bool tileState = false;
             if (GetTileStateFromNoise(val))
@@ -79,6 +79,13 @@ public class TerrainChunk
                 trianglesList.Add(vi + 1);
                 trianglesList.Add(vi + 2);
                 trianglesList.Add(vi + 3);
+
+                //Set colors of vertices to planet color
+                colors[vi] = mainColor;
+                colors[vi + 1] = mainColor;
+                colors[vi + 2] = mainColor;
+                colors[vi + 3] = mainColor;
+
                 tileState = true;
             }
             //Add tile data for position
@@ -107,19 +114,19 @@ public class TerrainChunk
 
         //Set mesh triangles
         mesh.triangles = trianglesList.ToArray();
+        mesh.colors = colors;
 
         //Set material of mesh to a new material using default sprite shader
         Material mat = new Material(Shader.Find("Universal Render Pipeline/2D/Sprite-Lit-Default"));
         //Set material texture to use terrain spritemap
         mat.mainTexture = spritemap;
-        mesh.colors = colors;
         //Set Mesh material to created material
         myObject.GetComponent<MeshRenderer>().sharedMaterial = mat;
+        myObject.GetComponent<MeshRenderer>().sortingOrder = 2;
         //Optimize mesh
         mesh.Optimize();
-        ///Set GameObject mesh to generated mesh
+        //Set GameObject mesh to generated mesh
         myObject.GetComponent<MeshFilter>().sharedMesh = mesh;
-
         //Set loaded = true to denote chunk being generated
         loaded = true;
     }
@@ -135,8 +142,8 @@ public class TerrainChunk
             Vector3 posBottomRow = new Vector3((position.x + i) / featureSize, (position.y + height) / featureSize);
 
             //Calculate noise val at both positions
-            float valTopRow = Noise.Simplex2D(posTopRow, 2).value;
-            float valBottomRow = Noise.Simplex2D(posBottomRow, 2).value;
+            float valTopRow = (float)noise.noise(posTopRow.x, posTopRow.y, posTopRow.z);
+            float valBottomRow = (float)noise.noise(posBottomRow.x, posBottomRow.y, posBottomRow.z);
 
             bool stateTopRow = false, stateBottomRow = false;
 
@@ -161,8 +168,8 @@ public class TerrainChunk
             Vector3 posRightCol = new Vector3((position.x + width) / featureSize, (position.y + j) / featureSize);
 
             //Calculate noise val at both positions
-            float valLeftCol = Noise.Simplex2D(posLeftCol, 2).value;
-            float valRightCol = Noise.Simplex2D(posRightCol, 2).value;
+            float valLeftCol = (float)noise.noise(posLeftCol.x, posLeftCol.y, posLeftCol.z);
+            float valRightCol = (float)noise.noise(posRightCol.x, posRightCol.y, posRightCol.z);
 
             bool stateLeftCol = false, stateRightCol = false;
 

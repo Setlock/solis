@@ -1,49 +1,37 @@
 ﻿using System.Collections.Generic;
-using UnityEditor;
 using UnityEngine;
 
 public class TerrainHandler : MonoBehaviour
 {
     public Transform viewer;
-    public Texture2D terrainSpritemap;
-    public GameObject liquid;
-    [Range(1,50)]
-    public int chunkWidth = 10, chunkHeight = 10;
-    [Range(-50,-1)]
-    public int startX = -1, startY = -1;
-    public int tileWidth = 1, tileHeight = 1;
-    public float featureSize = 16;
+    public Planet planet;
     int viewChunkWidth, viewChunkHeight;
-
-    Dictionary<Vector2, TerrainChunk> chunkDictionary = new Dictionary<Vector2, TerrainChunk>();
-    [Range(1,20)]
+    [Range(1, 20)]
     public int xViewDist = 10, yViewDist = 10;
-
-    TilesetLookup tilesetLookup;
-    public DefaultAsset tilesetLookupFile, tilesetTriangulationFile;
     Vector3[] vertices;
-    Vector2[] uv;
-    Color[] colors;
-    // Temporary method used for creating vertices and indices for chunks
+
     private void Start()
     {
-        tilesetLookup = new TilesetLookup(AssetDatabase.GetAssetPath(tilesetLookupFile),AssetDatabase.GetAssetPath(tilesetTriangulationFile));
-        System.Random r = new System.Random();
-        //liquid.GetComponent<SpriteRenderer>().color = new Color((float)r.NextDouble(), (float)r.NextDouble(), (float)r.NextDouble(), 1);
-        Color groundColor = new Color((float)r.NextDouble(), (float)r.NextDouble(), (float)r.NextDouble(), 1);
-        /*Calculate texture to use (64 and 96 are arbitrary values)
-        float textureOffsetX = 64f / (float)terrainSpritemap.width;
-        float textureOffsetY = 64f / (float)terrainSpritemap.height;
+        //Create Planet
+        Init(planet);
+    }
+    private void FixedUpdate()
+    {
+        UpdatePlanetRender(planet);
+    }
 
-        //Set width of tiles based on tilemap
-        float tileWidth = 64 / (float)terrainSpritemap.width;
-        float tileHeight = 64 / (float)terrainSpritemap.height;*/
+    /// <summary>
+    /// Create vertices for planet and set local view variables
+    /// </summary>
+    private void Init(Planet p)
+    {
+        int chunkWidth = p.planetSettings.chunkWidth;
+        int chunkHeight = p.planetSettings.chunkHeight;
 
-        //Create empty vertices and uv with size of (Chunk Area) * (Number of vertices per quad)
-        //NOTE: UVS NOT SET TO IMPROVE STARTUP TIME-THIS MAY CHANGE IN THE FUTURE
+        int tileWidth = p.planetSettings.tileWidth;
+        int tileHeight = p.planetSettings.tileHeight;
+
         vertices = new Vector3[chunkWidth * chunkHeight * 4];
-        uv = new Vector2[vertices.Length];
-        colors = new Color[vertices.Length];
 
         viewChunkWidth = chunkWidth * tileWidth;
         viewChunkHeight = chunkHeight * tileHeight;
@@ -53,56 +41,47 @@ public class TerrainHandler : MonoBehaviour
             {
                 //Bottom Left
                 vertices[i] = new Vector3(x, y);
-                colors[i] = groundColor;
-                //uv[i] = new Vector2(textureOffsetX, textureOffsetY);
 
                 //Bottom Right
                 vertices[i + 1] = new Vector3(x + tileWidth, y);
-                colors[i + 1] = groundColor;
-                //uv[i + 1] = new Vector2(textureOffsetX + tileWidth, textureOffsetY);
 
                 //Top Left
                 vertices[i + 2] = new Vector3(x, y + tileHeight);
-                colors[i + 2] = groundColor;
-                //uv[i + 2] = new Vector2(textureOffsetX, textureOffsetY + tileHeight);
 
                 //Top Right
                 vertices[i + 3] = new Vector3(x + tileWidth, y + tileHeight);
-                colors[i + 3] = groundColor;
-                //uv[i + 3] = new Vector2(textureOffsetX + tileWidth, textureOffsetY + tileHeight);
 
                 //Increment index
                 i += 4;
             }
         }
     }
-    List<Vector2> keysToRemove = new List<Vector2>();
-    private void FixedUpdate()
+    /// <summary>
+    /// Updates given planet chunkDictionary to contain chunks in viewChunkWidth and viewChunkHeight
+    /// </summary>
+    public void UpdatePlanetRender(Planet p)
     {
-        //Calculate current x and y position of player
+        //Calculate x and y position of viewer based on chunk scale
         int currentX = Mathf.RoundToInt(viewer.position.x / (float)viewChunkWidth);
         int currentY = Mathf.RoundToInt(viewer.position.y / (float)viewChunkHeight);
 
         //Assume all chunks should be removed
-        foreach (TerrainChunk c in chunkDictionary.Values)
-        {
-            c.SetRemove(true);
-        }
+        p.SetAllChunksToRemove();
 
-        //Iterate through all chunks within arbitary view dist (this will be changed later to correctly calculate camera view size)
         for (int x = -xViewDist; x < xViewDist; x++)
         {
             for (int y = -yViewDist; y < yViewDist; y++)
             {
-                //Get chunk coordinate
-                Vector2 chunkCoord = new Vector2((currentX + x) * chunkWidth, (currentY + y) * chunkHeight);
+                //Get chunk coordinate and chunk true view position coordinate
+                Vector2 chunkCoord = new Vector2((currentX + x) * p.planetSettings.chunkWidth, (currentY + y) * p.planetSettings.chunkHeight);
                 Vector2 viewChunkCoord = new Vector2((currentX + x) * viewChunkWidth, (currentY + y) * viewChunkHeight);
+
                 //If chunk with this coordinate has previously been added set shouldRemove = false and if chunk is not loaded, load chunk
                 //Else create new chunk at this positon and add to list of all chunks
-                if (chunkDictionary.ContainsKey(chunkCoord))
+                if (p.ContainsChunk(chunkCoord))
                 {
                     //Get previously created terrain chunk
-                    TerrainChunk tc = chunkDictionary[chunkCoord];
+                    TerrainChunk tc = p.GetChunk(chunkCoord);
                     //Chunk should not be removed
                     tc.SetRemove(false);
                     //Check if chunk is not loaded
@@ -113,29 +92,15 @@ public class TerrainHandler : MonoBehaviour
                 }
                 else
                 {
-                    TerrainChunk chunk = new TerrainChunk(transform, vertices, uv, terrainSpritemap, tilesetLookup, chunkCoord, viewChunkCoord, chunkWidth, chunkHeight, featureSize, colors);
-                    //Generate newly created terrain chunk
-                    chunk.GenerateMesh();
-                    chunkDictionary.Add(chunkCoord, chunk);
+                    //Create new chunk at coordinate and add to planet chunkDictionary
+                    p.CreateChunk(chunkCoord,viewChunkCoord,vertices);
                 }
             }
         }
-        //Loop through all chunks in list. If chunk should be removed then disable the GameObject 
-        //containing its mesh, set loaded = false, and add key to remove chunk from chunkDictionary
-        keysToRemove.Clear();
-        foreach (Vector2 key in chunkDictionary.Keys)
-        {
-            TerrainChunk c = chunkDictionary[key];
-            if (c.ShouldRemove())
-            {
-                c.Remove();
-                keysToRemove.Add(key);
-            }
-        }
-        //Remove terrain chunk from chunkDictionary to save memory
-        foreach (Vector2 key in keysToRemove)
-        {
-            chunkDictionary.Remove(key);
-        }
+        //Calculate chunks to be removed
+        p.AddChunksToRemoveList();
+
+        //Removed calculated chunks
+        p.RemoveRequiredChunksFromDictionary();
     }
 }
