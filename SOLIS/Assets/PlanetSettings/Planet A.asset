@@ -12,11 +12,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: d315d533a9d4fb24f96d9a9085efe77b, type: 3}
   m_Name: Planet A
   m_EditorClassIdentifier: 
-  chunkWidth: 10
-  chunkHeight: 10
-  tileWidth: 1
-  tileHeight: 1
-  planetSeed: 1
+  planetSeed: 0
   planetFeatureSize: 20
   terrainColor: {r: 0.3372549, g: 0.78431374, b: 0.43525302, a: 1}
   waterColor: {r: 0, g: 0, b: 0, a: 0}

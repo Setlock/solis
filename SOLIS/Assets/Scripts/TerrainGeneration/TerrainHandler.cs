@@ -8,53 +8,22 @@ public class TerrainHandler : MonoBehaviour
     int viewChunkWidth, viewChunkHeight;
     [Range(1, 20)]
     public int xViewDist = 10, yViewDist = 10;
-    Vector3[] vertices;
+    DefaultLoader defaultLoader;
 
     private void Start()
     {
-        //Create Planet
-        Init(planet);
+        Init();
     }
     private void FixedUpdate()
     {
         UpdatePlanetRender(planet);
     }
 
-    /// <summary>
-    /// Create vertices for planet and set local view variables
-    /// </summary>
-    private void Init(Planet p)
+    private void Init()
     {
-        int chunkWidth = p.planetSettings.chunkWidth;
-        int chunkHeight = p.planetSettings.chunkHeight;
-
-        int tileWidth = p.planetSettings.tileWidth;
-        int tileHeight = p.planetSettings.tileHeight;
-
-        vertices = new Vector3[chunkWidth * chunkHeight * 4];
-
-        viewChunkWidth = chunkWidth * tileWidth;
-        viewChunkHeight = chunkHeight * tileHeight;
-        for (int i = 0, y = 0; y < viewChunkHeight; y += tileWidth)
-        {
-            for (int x = 0; x < viewChunkWidth; x += tileHeight)
-            {
-                //Bottom Left
-                vertices[i] = new Vector3(x, y);
-
-                //Bottom Right
-                vertices[i + 1] = new Vector3(x + tileWidth, y);
-
-                //Top Left
-                vertices[i + 2] = new Vector3(x, y + tileHeight);
-
-                //Top Right
-                vertices[i + 3] = new Vector3(x + tileWidth, y + tileHeight);
-
-                //Increment index
-                i += 4;
-            }
-        }
+        defaultLoader = GetComponent<DefaultLoader>();
+        viewChunkWidth = defaultLoader.chunkWidth * defaultLoader.tileWidth;
+        viewChunkHeight = defaultLoader.chunkHeight * defaultLoader.tileHeight;
     }
     /// <summary>
     /// Updates given planet chunkDictionary to contain chunks in viewChunkWidth and viewChunkHeight
@@ -73,7 +42,7 @@ public class TerrainHandler : MonoBehaviour
             for (int y = -yViewDist; y < yViewDist; y++)
             {
                 //Get chunk coordinate and chunk true view position coordinate
-                Vector2 chunkCoord = new Vector2((currentX + x) * p.planetSettings.chunkWidth, (currentY + y) * p.planetSettings.chunkHeight);
+                Vector2 chunkCoord = new Vector2((currentX + x) * defaultLoader.chunkWidth, (currentY + y) * defaultLoader.chunkHeight);
                 Vector2 viewChunkCoord = new Vector2((currentX + x) * viewChunkWidth, (currentY + y) * viewChunkHeight);
 
                 //If chunk with this coordinate has previously been added set shouldRemove = false and if chunk is not loaded, load chunk
@@ -87,13 +56,13 @@ public class TerrainHandler : MonoBehaviour
                     //Check if chunk is not loaded
                     if (!tc.IsLoaded())
                     {
-                        tc.GenerateMesh();
+                        tc.GenerateChunk();
                     }
                 }
                 else
                 {
                     //Create new chunk at coordinate and add to planet chunkDictionary
-                    p.CreateChunk(chunkCoord, viewChunkCoord, vertices);
+                    p.CreateChunk(chunkCoord, defaultLoader.chunkWidth, defaultLoader.chunkHeight, viewChunkCoord, defaultLoader.defaultVertices, defaultLoader.defaultUV, defaultLoader.defaultColor, new Dictionary<Vector2, TileData>(defaultLoader.defaultTileData));
                 }
             }
         }

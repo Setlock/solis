@@ -25,14 +25,14 @@ public class TerrainChunk
     Color mainColor;
     SimplexNoiseGenerator noise;
     Material terrainMat;
-    public List<bool> stateList = new List<bool>();
-    public TerrainChunk(Material terrainMat, SimplexNoiseGenerator noise, Transform parent, Vector3[] vertices, Vector2[] uv, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors, Color mainColor)
+    public TerrainChunk(Material terrainMat, SimplexNoiseGenerator noise, Transform parent, Vector3[] vertices, Vector2[] uv, Dictionary<Vector2, TileData> tileData, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors, Color mainColor)
     {
         this.terrainMat = terrainMat;
         this.noise = noise;
         this.parent = parent;
         this.vertices = vertices;
         this.uv = uv;
+        this.tileDictionary = tileData;
         this.spritemap = spritemap;
         this.tilesetLookup = tilesetLookup;
         this.position = position;
@@ -43,11 +43,7 @@ public class TerrainChunk
         this.colors = colors;
         this.mainColor = mainColor;
     }
-
-    /// <summary>
-    /// Generate new GameObject for terrain chunk that contains mesh of tiles
-    /// </summary>
-    public void GenerateMesh()
+    public void GenerateChunk()
     {
         //Create GameObject with unique name and mesh components
         myObject = new GameObject("Terrain Chunk" + position, typeof(MeshFilter), typeof(MeshRenderer));
@@ -64,89 +60,40 @@ public class TerrainChunk
         //Create list to add triangles
         List<int> trianglesList = new List<int>();
 
-        //Create variables to calculate proper index
-        int vi = 0;
-        int xPos = 0;
-        int yPos = 0;
-        //Vector2 tilePos = new Vector2(0, 0);
-        //Loop through all vertices adding vertex to triangles array at correct location
-        /*while(vi < vertices.Length)
+        foreach (Vector2 key in tileDictionary.Keys)
         {
-            if (tileDictionary.ContainsKey(tilePos) && tileDictionary[tilePos].GetState())
-            {
-                tileDictionary[tilePos].SetVertexIndex(vi);
-                trianglesList.Add(vi);
-                trianglesList.Add(vi + 2);
-                trianglesList.Add(vi + 1);
-
-                trianglesList.Add(vi + 1);
-                trianglesList.Add(vi + 2);
-                trianglesList.Add(vi + 3);
-
-                colors[vi] = mainColor;
-                colors[vi + 1] = mainColor;
-                colors[vi + 2] = mainColor;
-                colors[vi + 3] = mainColor;
-            }
-            vi += 4;
-
-            tilePos.x++;
-            if (tilePos.x >= width)
-            {
-                tilePos.y++;
-                tilePos.x = 0;
-            }
-        }*/
-        while (vi < vertices.Length)
-        {
-            //Get current tile position
-            Vector3 pos = new Vector3((position.x + xPos) / featureSize, (position.y + yPos) / featureSize);
-            //Get value from Simplex Noise
+            TileData tileData = tileDictionary[key];
+            Vector3 pos = new Vector3((position.x + key.x) / featureSize, (position.y + key.y) / featureSize);
             float val = (float)noise.Evaluate(pos.x, pos.y, pos.z);
-            //Check if value is above some arbitrary number if it is then draw that quad
-            bool tileState = false;
-            System.Random r = new System.Random();
             if (GetTileStateFromNoise(val))
             {
-                //Add vertex location to draw 2 triangles
-                trianglesList.Add(vi);
-                trianglesList.Add(vi + 2);
-                trianglesList.Add(vi + 1);
+                tileData.SetState(true);
 
-                trianglesList.Add(vi + 1);
-                trianglesList.Add(vi + 2);
-                trianglesList.Add(vi + 3);
+                int vi = tileData.GetVertexIndex();
+                if (vi != -1)
+                {
+                    //Add vertex location to draw 2 triangles
+                    trianglesList.Add(vi);
+                    trianglesList.Add(vi + 2);
+                    trianglesList.Add(vi + 1);
 
-                //Set colors of vertices to planet color
-                colors[vi] = mainColor;
-                colors[vi + 1] = mainColor;
-                colors[vi + 2] = mainColor;
-                colors[vi + 3] = mainColor;
+                    trianglesList.Add(vi + 1);
+                    trianglesList.Add(vi + 2);
+                    trianglesList.Add(vi + 3);
 
-                tileState = true;
+                    //Set colors of vertices to planet color
+                    colors[vi] = mainColor;
+                    colors[vi + 1] = mainColor;
+                    colors[vi + 2] = mainColor;
+                    colors[vi + 3] = mainColor;
+                }
             }
-            //Add tile data for position
-            tileDictionary.Add(new Vector2(xPos, yPos), new TileData(vi, tileState));
-
-            //Increment vertex index to next initial quad vertex
-            vi += 4;
-
-            //Calculate x and y position for proper noise calculation
-            xPos++;
-            if (xPos >= width)
+            else
             {
-                yPos++;
-                xPos = 0;
+                tileData.SetState(false);
             }
         }
 
-        //Generate tile data for tiles that surround chunk
-        GenerateSurroundingTileData();
-
-        //Set the adjacent tile data for all tiles
-        SetTileAdjacents();
-
-        //Set mesh vertices and update UVs for all tiles
         mesh.vertices = vertices;
         UpdateTileUV();
 
@@ -156,7 +103,7 @@ public class TerrainChunk
         //Set mesh triangles
         mesh.triangles = trianglesList.ToArray();
         mesh.colors = colors;
-        
+
         //Set material texture to use terrain spritemap
         //Set Mesh material to created material
         myObject.GetComponent<MeshRenderer>().sharedMaterial = terrainMat;
@@ -167,75 +114,6 @@ public class TerrainChunk
         myObject.GetComponent<MeshFilter>().sharedMesh = mesh;
         //Set loaded = true to denote chunk being generated
         loaded = true;
-    }
-    public void CreateTileStatesFromList()
-    {
-        int index = 0;
-        for(int i = -1; i <= width; i++)
-        {
-            for(int j = -1; j <= height; j++)
-            {
-                tileDictionary.Add(new Vector2(i, j), new TileData(0, stateList[index]));
-                index++;
-            }
-        }
-    }
-    /// <summary>
-    /// Generates tile data for tiles that surround chunk 
-    /// </summary>
-    public void GenerateSurroundingTileData()
-    {
-        for (int i = -1; i <= width; i++)
-        {
-            //Calculate noise position at x for top and bottom row
-            Vector3 posTopRow = new Vector3((position.x + i) / featureSize, (position.y + -1) / featureSize);
-            Vector3 posBottomRow = new Vector3((position.x + i) / featureSize, (position.y + height) / featureSize);
-
-            //Calculate noise val at both positions
-            float valTopRow = (float)noise.Evaluate(posTopRow.x, posTopRow.y, posTopRow.z);
-            float valBottomRow = (float)noise.Evaluate(posBottomRow.x, posBottomRow.y, posBottomRow.z);
-
-            bool stateTopRow = false, stateBottomRow = false;
-
-            //Get tile state for both positions
-            if (GetTileStateFromNoise(valTopRow))
-            {
-                stateTopRow = true;
-            }
-            if (GetTileStateFromNoise(valBottomRow))
-            {
-                stateBottomRow = true;
-            }
-            //Add tiles to dictionary with vertex index of -1 to avoid adding unecessary vertices
-            tileDictionary.Add(new Vector2(i, -1), new TileData(-1, stateTopRow));
-            tileDictionary.Add(new Vector2(i, height), new TileData(-1, stateBottomRow));
-        }
-        //Start at y = 0 and go to y = height-1 to avoide duplicate entries in Dictionary
-        for (int j = 0; j < height; j++)
-        {
-            //Calculate noise position at y for left and right column
-            Vector3 posLeftCol = new Vector3((position.x + -1) / featureSize, (position.y + j) / featureSize);
-            Vector3 posRightCol = new Vector3((position.x + width) / featureSize, (position.y + j) / featureSize);
-
-            //Calculate noise val at both positions
-            float valLeftCol = (float)noise.Evaluate(posLeftCol.x, posLeftCol.y, posLeftCol.z);
-            float valRightCol = (float)noise.Evaluate(posRightCol.x, posRightCol.y, posRightCol.z);
-
-            bool stateLeftCol = false, stateRightCol = false;
-
-            //Get tile state for both positions
-            if (GetTileStateFromNoise(valLeftCol))
-            {
-                stateLeftCol = true;
-            }
-            if (GetTileStateFromNoise(valRightCol))
-            {
-                stateRightCol = true;
-            }
-            //Add tiles to dictionary with vertex index of -1 to avoid adding unecessary vertices
-            tileDictionary.Add(new Vector2(-1, j), new TileData(-1, stateLeftCol));
-            tileDictionary.Add(new Vector2(width, j), new TileData(-1, stateRightCol));
-        }
     }
     /// <summary>
     /// Returns state of tile based on noise val and same arbitrary number
@@ -257,41 +135,6 @@ public class TerrainChunk
         loaded = false;
         myObject.SetActive(false);
         tileDictionary.Clear();
-    }
-    /// <summary>
-    /// Set all adjacent tiles for each tile disregarding tiles created around edge
-    /// </summary>
-    public void SetTileAdjacents()
-    {
-        for(int x = 0; x < width; x++)
-        {
-            for(int y= 0; y < height; y++)
-            {
-                Vector2 key = new Vector2(x, y);
-                TileData tile = tileDictionary[key];
-                TileData tileT = GetTileData(new Vector2(key.x, key.y + 1));
-                TileData tileTR = GetTileData(new Vector2(key.x + 1, key.y + 1));
-                TileData tileTL = GetTileData(new Vector2(key.x - 1, key.y + 1));
-
-                TileData tileB = GetTileData(new Vector2(key.x, key.y - 1));
-                TileData tileBR = GetTileData(new Vector2(key.x + 1, key.y - 1));
-                TileData tileBL = GetTileData(new Vector2(key.x - 1, key.y - 1));
-
-                TileData tileL = GetTileData(new Vector2(key.x - 1, key.y));
-                TileData tileR = GetTileData(new Vector2(key.x + 1, key.y));
-
-                tile.adjTiles[0] = tileTL;
-                tile.adjTiles[1] = tileT;
-                tile.adjTiles[2] = tileTR;
-
-                tile.adjTiles[3] = tileL;
-                tile.adjTiles[4] = tileR;
-
-                tile.adjTiles[5] = tileBL;
-                tile.adjTiles[6] = tileB;
-                tile.adjTiles[7] = tileBR;
-            }
-        }
     }
     /// <summary>
     /// Return data of tile at specific position
@@ -447,6 +290,10 @@ public class TileData
     public int GetBinaryState()
     {
         return binaryState;
+    }
+    public void SetState(bool state)
+    {
+        this.state = state;
     }
     public bool GetState()
     {

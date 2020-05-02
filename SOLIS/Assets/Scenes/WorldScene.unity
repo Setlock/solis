@@ -749,6 +749,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 1839395581}
+  - component: {fileID: 1839395583}
   - component: {fileID: 1839395582}
   m_Layer: 0
   m_Name: TerrainHandler
@@ -787,3 +788,22 @@ MonoBehaviour:
   planet: {fileID: 135525411}
   xViewDist: 10
   yViewDist: 10
+--- !u!114 &1839395583
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1839395580}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 649539ff6d2e25f40bfc60e1dc5b0cbd, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  chunkWidth: 10
+  chunkHeight: 10
+  tileWidth: 1
+  tileHeight: 1
+  defaultVertices: []
+  defaultUV: []
+  defaultColor: []
