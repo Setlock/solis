@@ -35,9 +35,9 @@ public class TerrainHandler : MonoBehaviour
 
         viewChunkWidth = chunkWidth * tileWidth;
         viewChunkHeight = chunkHeight * tileHeight;
-        for (int i = 0, y = 0; y < viewChunkHeight; y+=tileWidth)
+        for (int i = 0, y = 0; y < viewChunkHeight; y += tileWidth)
         {
-            for (int x = 0; x < viewChunkWidth; x+=tileHeight)
+            for (int x = 0; x < viewChunkWidth; x += tileHeight)
             {
                 //Bottom Left
                 vertices[i] = new Vector3(x, y);
@@ -93,7 +93,7 @@ public class TerrainHandler : MonoBehaviour
                 else
                 {
                     //Create new chunk at coordinate and add to planet chunkDictionary
-                    p.CreateChunk(chunkCoord,viewChunkCoord,vertices);
+                    p.CreateChunk(chunkCoord, viewChunkCoord, vertices);
                 }
             }
         }

@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.SocialPlatforms.GameCenter;
+using UnityEngine.Tilemaps;
+using UnityEngine.UIElements;
 
 public class TerrainChunk
 {
@@ -9,9 +12,10 @@ public class TerrainChunk
     bool remove = false;
     GameObject myObject;
     Mesh mesh;
-    Vector2 position, viewPosition;
-    int width, height;
-    float featureSize;
+    public Vector2 position;
+    Vector2 viewPosition;
+    public int width, height;
+    public float featureSize;
     Texture2D spritemap;
     TilesetLookup tilesetLookup;
     public Dictionary<Vector2, TileData> tileDictionary = new Dictionary<Vector2, TileData>();
@@ -21,6 +25,7 @@ public class TerrainChunk
     Color mainColor;
     SimplexNoiseGenerator noise;
     Material terrainMat;
+    public List<bool> stateList = new List<bool>();
     public TerrainChunk(Material terrainMat, SimplexNoiseGenerator noise, Transform parent, Vector3[] vertices, Vector2[] uv, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors, Color mainColor)
     {
         this.terrainMat = terrainMat;
@@ -38,6 +43,7 @@ public class TerrainChunk
         this.colors = colors;
         this.mainColor = mainColor;
     }
+
     /// <summary>
     /// Generate new GameObject for terrain chunk that contains mesh of tiles
     /// </summary>
@@ -62,16 +68,44 @@ public class TerrainChunk
         int vi = 0;
         int xPos = 0;
         int yPos = 0;
+        //Vector2 tilePos = new Vector2(0, 0);
         //Loop through all vertices adding vertex to triangles array at correct location
-        System.Random r = new System.Random();
+        /*while(vi < vertices.Length)
+        {
+            if (tileDictionary.ContainsKey(tilePos) && tileDictionary[tilePos].GetState())
+            {
+                tileDictionary[tilePos].SetVertexIndex(vi);
+                trianglesList.Add(vi);
+                trianglesList.Add(vi + 2);
+                trianglesList.Add(vi + 1);
+
+                trianglesList.Add(vi + 1);
+                trianglesList.Add(vi + 2);
+                trianglesList.Add(vi + 3);
+
+                colors[vi] = mainColor;
+                colors[vi + 1] = mainColor;
+                colors[vi + 2] = mainColor;
+                colors[vi + 3] = mainColor;
+            }
+            vi += 4;
+
+            tilePos.x++;
+            if (tilePos.x >= width)
+            {
+                tilePos.y++;
+                tilePos.x = 0;
+            }
+        }*/
         while (vi < vertices.Length)
         {
             //Get current tile position
             Vector3 pos = new Vector3((position.x + xPos) / featureSize, (position.y + yPos) / featureSize);
             //Get value from Simplex Noise
-            float val = (float)noise.noise(pos.x, pos.y, pos.z);
+            float val = (float)noise.Evaluate(pos.x, pos.y, pos.z);
             //Check if value is above some arbitrary number if it is then draw that quad
             bool tileState = false;
+            System.Random r = new System.Random();
             if (GetTileStateFromNoise(val))
             {
                 //Add vertex location to draw 2 triangles
@@ -105,6 +139,7 @@ public class TerrainChunk
                 xPos = 0;
             }
         }
+
         //Generate tile data for tiles that surround chunk
         GenerateSurroundingTileData();
 
@@ -115,10 +150,13 @@ public class TerrainChunk
         mesh.vertices = vertices;
         UpdateTileUV();
 
+        myObject.AddComponent<CompositeCollider2D>();
+        myObject.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Static;
+
         //Set mesh triangles
         mesh.triangles = trianglesList.ToArray();
         mesh.colors = colors;
-
+        
         //Set material texture to use terrain spritemap
         //Set Mesh material to created material
         myObject.GetComponent<MeshRenderer>().sharedMaterial = terrainMat;
@@ -129,6 +167,18 @@ public class TerrainChunk
         myObject.GetComponent<MeshFilter>().sharedMesh = mesh;
         //Set loaded = true to denote chunk being generated
         loaded = true;
+    }
+    public void CreateTileStatesFromList()
+    {
+        int index = 0;
+        for(int i = -1; i <= width; i++)
+        {
+            for(int j = -1; j <= height; j++)
+            {
+                tileDictionary.Add(new Vector2(i, j), new TileData(0, stateList[index]));
+                index++;
+            }
+        }
     }
     /// <summary>
     /// Generates tile data for tiles that surround chunk 
@@ -142,8 +192,8 @@ public class TerrainChunk
             Vector3 posBottomRow = new Vector3((position.x + i) / featureSize, (position.y + height) / featureSize);
 
             //Calculate noise val at both positions
-            float valTopRow = (float)noise.noise(posTopRow.x, posTopRow.y, posTopRow.z);
-            float valBottomRow = (float)noise.noise(posBottomRow.x, posBottomRow.y, posBottomRow.z);
+            float valTopRow = (float)noise.Evaluate(posTopRow.x, posTopRow.y, posTopRow.z);
+            float valBottomRow = (float)noise.Evaluate(posBottomRow.x, posBottomRow.y, posBottomRow.z);
 
             bool stateTopRow = false, stateBottomRow = false;
 
@@ -168,8 +218,8 @@ public class TerrainChunk
             Vector3 posRightCol = new Vector3((position.x + width) / featureSize, (position.y + j) / featureSize);
 
             //Calculate noise val at both positions
-            float valLeftCol = (float)noise.noise(posLeftCol.x, posLeftCol.y, posLeftCol.z);
-            float valRightCol = (float)noise.noise(posRightCol.x, posRightCol.y, posRightCol.z);
+            float valLeftCol = (float)noise.Evaluate(posLeftCol.x, posLeftCol.y, posLeftCol.z);
+            float valRightCol = (float)noise.Evaluate(posRightCol.x, posRightCol.y, posRightCol.z);
 
             bool stateLeftCol = false, stateRightCol = false;
 
@@ -262,8 +312,9 @@ public class TerrainChunk
     {
         float tileWidth = tilesetLookup.getTileWidth() / (float)spritemap.width;
         float tileHeight = tilesetLookup.getTileHeight() / (float)spritemap.height;
-        foreach (TileData tileData in tileDictionary.Values)
+        foreach (Vector2 key in tileDictionary.Keys)
         {
+            TileData tileData = tileDictionary[key];
             if (tileData.GetVertexIndex() != -1)
             {
                 TileData tileTL = tileData.adjTiles[0];
@@ -330,6 +381,12 @@ public class TerrainChunk
                 {
                     tileName = "CurveBR";
                 }
+                if (tileData.GetState() && !tileName.Equals("Grass"))
+                {
+                    BoxCollider2D box = myObject.AddComponent<BoxCollider2D>();
+                    box.offset = new Vector2(vertices[vi].x+0.5f,vertices[vi].y+0.5f);
+                    box.usedByComposite = true;
+                }
                 Vector2 uvCoord = tilesetLookup.GetPosition(tileName);
                 float textureOffsetX = uvCoord.x / (float)spritemap.width;
                 float textureOffsetY = uvCoord.y / (float)spritemap.height;
@@ -378,6 +435,10 @@ public class TileData
         {
             binaryState = 1;
         }
+    }
+    public void SetVertexIndex(int vi)
+    {
+        this.vertexIndex = vi;
     }
     public int GetVertexIndex()
     {

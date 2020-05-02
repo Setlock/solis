@@ -14,7 +14,8 @@ public class CharacterFollow : MonoBehaviour
         Vector3 desiredPositon = target.position + offset;
 
         //Linearly interpolate between point and move camera to that position
-        Vector3 smoothedPosition = Vector3.Lerp(transform.position, desiredPositon, smoothSpeed);
+        Vector2 lerp = Vector2.Lerp(transform.position, desiredPositon, smoothSpeed);
+        Vector3 smoothedPosition = new Vector3(lerp.x,lerp.y, transform.position.z);
         transform.position = smoothedPosition;
 
         //If Q key is pressed increase view size to "zoom out"

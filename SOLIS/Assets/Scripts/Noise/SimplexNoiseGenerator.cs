@@ -1,2621 +1,450 @@
-﻿/*
- * OpenSimplex Noise in C# Based on Translated from OpenSimplex Noise in Java
- * by Kurt Spencer
- * 
- * v1.1 (October 5, 2014)
- * - Added 2D and 4D implementations.
- * - Proper gradient sets for all dimensions, from a
- *   dimensionally-generalizable scheme with an actual
- *   rhyme and reason behind it.
- * - Removed default permutation array in favor of
- *   default seed.
- * - Changed seed-based constructor to be independent
- *   of any particular randomization library, so results
- *   will be the same when ported to other languages.
- */
+﻿/* OpenSimplex Noise in C#
+* Ported from https://gist.github.com/KdotJPG/b1270127455a94ac5d19
+* and heavily refactored to improve performance. */
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Runtime.CompilerServices;
 public class SimplexNoiseGenerator
 {
-
-	private static double STRETCH_CONSTANT_2D = -0.211324865405187;    //(1/Math.sqrt(2+1)-1)/2;
-	private static double SQUISH_CONSTANT_2D = 0.366025403784439;      //(Math.sqrt(2+1)-1)/2;
-	private static double STRETCH_CONSTANT_3D = -1.0 / 6;              //(1/Math.sqrt(3+1)-1)/3;
-	private static double SQUISH_CONSTANT_3D = 1.0 / 3;                //(Math.sqrt(3+1)-1)/3;
-	private static double STRETCH_CONSTANT_4D = -0.138196601125011;    //(1/Math.sqrt(4+1)-1)/4;
-	private static double SQUISH_CONSTANT_4D = 0.309016994374947;      //(Math.sqrt(4+1)-1)/4;
-
-	private static double NORM_CONSTANT_2D = 47;
-	private static double NORM_CONSTANT_3D = 103;
-	private static double NORM_CONSTANT_4D = 30;
-
-	private static long DEFAULT_SEED = 0;
-
-	private short[] perm;
-	private short[] permGradIndex3D;
-
-	public SimplexNoiseGenerator() : this(DEFAULT_SEED)
-	{
-		
-	}
-
-	public SimplexNoiseGenerator(short[] perm)
-	{
-		this.perm = perm;
-		permGradIndex3D = new short[256];
-
-		for (int i = 0; i < 256; i++)
-		{
-			//Since 3D has 24 gradients, simple bitmask won't work, so precompute modulo array.
-			permGradIndex3D[i] = (short)((perm[i] % (gradients3D.Length / 3)) * 3);
-		}
-	}
-
-	//Initializes the class using a permutation array generated from a 64-bit seed.
-	//Generates a proper permutation (i.e. doesn't merely perform N successive pair swaps on a base array)
-	//Uses a simple 64-bit LCG.
-	public SimplexNoiseGenerator(long seed)
-	{
-		perm = new short[256];
-		permGradIndex3D = new short[256];
-		short[] source = new short[256];
-		for (short i = 0; i < 256; i++)
-			source[i] = i;
-		seed = seed * 6364136223846793005L + 1442695040888963407L;
-		seed = seed * 6364136223846793005L + 1442695040888963407L;
-		seed = seed * 6364136223846793005L + 1442695040888963407L;
-		for (int i = 255; i >= 0; i--)
-		{
-			seed = seed * 6364136223846793005L + 1442695040888963407L;
-			int r = (int)((seed + 31) % (i + 1));
-			if (r < 0)
-				r += (i + 1);
-			perm[i] = source[r];
-			permGradIndex3D[i] = (short)((perm[i] % (gradients3D.Length / 3)) * 3);
-			source[r] = source[i];
-		}
-	}
-	public void updateSeed(long seed)
-	{
-		perm = new short[256];
-		permGradIndex3D = new short[256];
-		short[] source = new short[256];
-		for (short i = 0; i < 256; i++)
-			source[i] = i;
-		seed = seed * 6364136223846793005L + 1442695040888963407L;
-		seed = seed * 6364136223846793005L + 1442695040888963407L;
-		seed = seed * 6364136223846793005L + 1442695040888963407L;
-		for (int i = 255; i >= 0; i--)
-		{
-			seed = seed * 6364136223846793005L + 1442695040888963407L;
-			int r = (int)((seed + 31) % (i + 1));
-			if (r < 0)
-				r += (i + 1);
-			perm[i] = source[r];
-			permGradIndex3D[i] = (short)((perm[i] % (gradients3D.Length / 3)) * 3);
-			source[r] = source[i];
-		}
-	}
-
-	//2D OpenSimplex Noise.
-	public double noise(double x, double y)
-	{
-
-		//Place input coordinates onto grid.
-		double stretchOffset = (x + y) * STRETCH_CONSTANT_2D;
-		double xs = x + stretchOffset;
-		double ys = y + stretchOffset;
-
-		//Floor to get grid coordinates of rhombus (stretched square) super-cell origin.
-		int xsb = fastFloor(xs);
-		int ysb = fastFloor(ys);
-
-		//Skew out to get actual coordinates of rhombus origin. We'll need these later.
-		double squishOffset = (xsb + ysb) * SQUISH_CONSTANT_2D;
-		double xb = xsb + squishOffset;
-		double yb = ysb + squishOffset;
-
-		//Compute grid coordinates relative to rhombus origin.
-		double xins = xs - xsb;
-		double yins = ys - ysb;
-
-		//Sum those together to get a value that determines which region we're in.
-		double inSum = xins + yins;
-
-		//Positions relative to origin point.
-		double dx0 = x - xb;
-		double dy0 = y - yb;
-
-		//We'll be defining these inside the next block and using them afterwards.
-		double dx_ext, dy_ext;
-		int xsv_ext, ysv_ext;
-
-		double value = 0;
-
-		//Contribution (1,0)
-		double dx1 = dx0 - 1 - SQUISH_CONSTANT_2D;
-		double dy1 = dy0 - 0 - SQUISH_CONSTANT_2D;
-		double attn1 = 2 - dx1 * dx1 - dy1 * dy1;
-		if (attn1 > 0)
-		{
-			attn1 *= attn1;
-			value += attn1 * attn1 * extrapolate(xsb + 1, ysb + 0, dx1, dy1);
-		}
-
-		//Contribution (0,1)
-		double dx2 = dx0 - 0 - SQUISH_CONSTANT_2D;
-		double dy2 = dy0 - 1 - SQUISH_CONSTANT_2D;
-		double attn2 = 2 - dx2 * dx2 - dy2 * dy2;
-		if (attn2 > 0)
-		{
-			attn2 *= attn2;
-			value += attn2 * attn2 * extrapolate(xsb + 0, ysb + 1, dx2, dy2);
-		}
-
-		if (inSum <= 1)
-		{ //We're inside the triangle (2-Simplex) at (0,0)
-			double zins = 1 - inSum;
-			if (zins > xins || zins > yins)
-			{ //(0,0) is one of the closest two triangular vertices
-				if (xins > yins)
-				{
-					xsv_ext = xsb + 1;
-					ysv_ext = ysb - 1;
-					dx_ext = dx0 - 1;
-					dy_ext = dy0 + 1;
-				}
-				else
-				{
-					xsv_ext = xsb - 1;
-					ysv_ext = ysb + 1;
-					dx_ext = dx0 + 1;
-					dy_ext = dy0 - 1;
-				}
-			}
-			else
-			{ //(1,0) and (0,1) are the closest two vertices.
-				xsv_ext = xsb + 1;
-				ysv_ext = ysb + 1;
-				dx_ext = dx0 - 1 - 2 * SQUISH_CONSTANT_2D;
-				dy_ext = dy0 - 1 - 2 * SQUISH_CONSTANT_2D;
-			}
-		}
-		else
-		{ //We're inside the triangle (2-Simplex) at (1,1)
-			double zins = 2 - inSum;
-			if (zins < xins || zins < yins)
-			{ //(0,0) is one of the closest two triangular vertices
-				if (xins > yins)
-				{
-					xsv_ext = xsb + 2;
-					ysv_ext = ysb + 0;
-					dx_ext = dx0 - 2 - 2 * SQUISH_CONSTANT_2D;
-					dy_ext = dy0 + 0 - 2 * SQUISH_CONSTANT_2D;
-				}
-				else
-				{
-					xsv_ext = xsb + 0;
-					ysv_ext = ysb + 2;
-					dx_ext = dx0 + 0 - 2 * SQUISH_CONSTANT_2D;
-					dy_ext = dy0 - 2 - 2 * SQUISH_CONSTANT_2D;
-				}
-			}
-			else
-			{ //(1,0) and (0,1) are the closest two vertices.
-				dx_ext = dx0;
-				dy_ext = dy0;
-				xsv_ext = xsb;
-				ysv_ext = ysb;
-			}
-			xsb += 1;
-			ysb += 1;
-			dx0 = dx0 - 1 - 2 * SQUISH_CONSTANT_2D;
-			dy0 = dy0 - 1 - 2 * SQUISH_CONSTANT_2D;
-		}
-
-		//Contribution (0,0) or (1,1)
-		double attn0 = 2 - dx0 * dx0 - dy0 * dy0;
-		if (attn0 > 0)
-		{
-			attn0 *= attn0;
-			value += attn0 * attn0 * extrapolate(xsb, ysb, dx0, dy0);
-		}
-
-		//Extra Vertex
-		double attn_ext = 2 - dx_ext * dx_ext - dy_ext * dy_ext;
-		if (attn_ext > 0)
-		{
-			attn_ext *= attn_ext;
-			value += attn_ext * attn_ext * extrapolate(xsv_ext, ysv_ext, dx_ext, dy_ext);
-		}
-
-		return value / NORM_CONSTANT_2D;
-	}
-
-	//3D OpenSimplex Noise.
-	public double noise(double x, double y, double z)
-	{
-
-		//Place input coordinates on simplectic honeycomb.
-		double stretchOffset = (x + y + z) * STRETCH_CONSTANT_3D;
-		double xs = x + stretchOffset;
-		double ys = y + stretchOffset;
-		double zs = z + stretchOffset;
-
-		//Floor to get simplectic honeycomb coordinates of rhombohedron (stretched cube) super-cell origin.
-		int xsb = fastFloor(xs);
-		int ysb = fastFloor(ys);
-		int zsb = fastFloor(zs);
-
-		//Skew out to get actual coordinates of rhombohedron origin. We'll need these later.
-		double squishOffset = (xsb + ysb + zsb) * SQUISH_CONSTANT_3D;
-		double xb = xsb + squishOffset;
-		double yb = ysb + squishOffset;
-		double zb = zsb + squishOffset;
-
-		//Compute simplectic honeycomb coordinates relative to rhombohedral origin.
-		double xins = xs - xsb;
-		double yins = ys - ysb;
-		double zins = zs - zsb;
-
-		//Sum those together to get a value that determines which region we're in.
-		double inSum = xins + yins + zins;
-
-		//Positions relative to origin point.
-		double dx0 = x - xb;
-		double dy0 = y - yb;
-		double dz0 = z - zb;
-
-		//We'll be defining these inside the next block and using them afterwards.
-		double dx_ext0, dy_ext0, dz_ext0;
-		double dx_ext1, dy_ext1, dz_ext1;
-		int xsv_ext0, ysv_ext0, zsv_ext0;
-		int xsv_ext1, ysv_ext1, zsv_ext1;
-
-		double value = 0;
-		if (inSum <= 1)
-		{ //We're inside the tetrahedron (3-Simplex) at (0,0,0)
-
-			//Determine which two of (0,0,1), (0,1,0), (1,0,0) are closest.
-			byte aPoint = 0x01;
-			double aScore = xins;
-			byte bPoint = 0x02;
-			double bScore = yins;
-			if (aScore >= bScore && zins > bScore)
-			{
-				bScore = zins;
-				bPoint = 0x04;
-			}
-			else if (aScore < bScore && zins > aScore)
-			{
-				aScore = zins;
-				aPoint = 0x04;
-			}
-
-			//Now we determine the two lattice points not part of the tetrahedron that may contribute.
-			//This depends on the closest two tetrahedral vertices, including (0,0,0)
-			double wins = 1 - inSum;
-			if (wins > aScore || wins > bScore)
-			{ //(0,0,0) is one of the closest two tetrahedral vertices.
-				byte c = (bScore > aScore ? bPoint : aPoint); //Our other closest vertex is the closest out of a and b.
-
-				if ((c & 0x01) == 0)
-				{
-					xsv_ext0 = xsb - 1;
-					xsv_ext1 = xsb;
-					dx_ext0 = dx0 + 1;
-					dx_ext1 = dx0;
-				}
-				else
-				{
-					xsv_ext0 = xsv_ext1 = xsb + 1;
-					dx_ext0 = dx_ext1 = dx0 - 1;
-				}
-
-				if ((c & 0x02) == 0)
-				{
-					ysv_ext0 = ysv_ext1 = ysb;
-					dy_ext0 = dy_ext1 = dy0;
-					if ((c & 0x01) == 0)
-					{
-						ysv_ext1 -= 1;
-						dy_ext1 += 1;
-					}
-					else
-					{
-						ysv_ext0 -= 1;
-						dy_ext0 += 1;
-					}
-				}
-				else
-				{
-					ysv_ext0 = ysv_ext1 = ysb + 1;
-					dy_ext0 = dy_ext1 = dy0 - 1;
-				}
-
-				if ((c & 0x04) == 0)
-				{
-					zsv_ext0 = zsb;
-					zsv_ext1 = zsb - 1;
-					dz_ext0 = dz0;
-					dz_ext1 = dz0 + 1;
-				}
-				else
-				{
-					zsv_ext0 = zsv_ext1 = zsb + 1;
-					dz_ext0 = dz_ext1 = dz0 - 1;
-				}
-			}
-			else
-			{ //(0,0,0) is not one of the closest two tetrahedral vertices.
-				byte c = (byte)(aPoint | bPoint); //Our two extra vertices are determined by the closest two.
-
-				if ((c & 0x01) == 0)
-				{
-					xsv_ext0 = xsb;
-					xsv_ext1 = xsb - 1;
-					dx_ext0 = dx0 - 2 * SQUISH_CONSTANT_3D;
-					dx_ext1 = dx0 + 1 - SQUISH_CONSTANT_3D;
-				}
-				else
-				{
-					xsv_ext0 = xsv_ext1 = xsb + 1;
-					dx_ext0 = dx0 - 1 - 2 * SQUISH_CONSTANT_3D;
-					dx_ext1 = dx0 - 1 - SQUISH_CONSTANT_3D;
-				}
-
-				if ((c & 0x02) == 0)
-				{
-					ysv_ext0 = ysb;
-					ysv_ext1 = ysb - 1;
-					dy_ext0 = dy0 - 2 * SQUISH_CONSTANT_3D;
-					dy_ext1 = dy0 + 1 - SQUISH_CONSTANT_3D;
-				}
-				else
-				{
-					ysv_ext0 = ysv_ext1 = ysb + 1;
-					dy_ext0 = dy0 - 1 - 2 * SQUISH_CONSTANT_3D;
-					dy_ext1 = dy0 - 1 - SQUISH_CONSTANT_3D;
-				}
-
-				if ((c & 0x04) == 0)
-				{
-					zsv_ext0 = zsb;
-					zsv_ext1 = zsb - 1;
-					dz_ext0 = dz0 - 2 * SQUISH_CONSTANT_3D;
-					dz_ext1 = dz0 + 1 - SQUISH_CONSTANT_3D;
-				}
-				else
-				{
-					zsv_ext0 = zsv_ext1 = zsb + 1;
-					dz_ext0 = dz0 - 1 - 2 * SQUISH_CONSTANT_3D;
-					dz_ext1 = dz0 - 1 - SQUISH_CONSTANT_3D;
-				}
-			}
-
-			//Contribution (0,0,0)
-			double attn0 = 2 - dx0 * dx0 - dy0 * dy0 - dz0 * dz0;
-			if (attn0 > 0)
-			{
-				attn0 *= attn0;
-				value += attn0 * attn0 * extrapolate(xsb + 0, ysb + 0, zsb + 0, dx0, dy0, dz0);
-			}
-
-			//Contribution (1,0,0)
-			double dx1 = dx0 - 1 - SQUISH_CONSTANT_3D;
-			double dy1 = dy0 - 0 - SQUISH_CONSTANT_3D;
-			double dz1 = dz0 - 0 - SQUISH_CONSTANT_3D;
-			double attn1 = 2 - dx1 * dx1 - dy1 * dy1 - dz1 * dz1;
-			if (attn1 > 0)
-			{
-				attn1 *= attn1;
-				value += attn1 * attn1 * extrapolate(xsb + 1, ysb + 0, zsb + 0, dx1, dy1, dz1);
-			}
-
-			//Contribution (0,1,0)
-			double dx2 = dx0 - 0 - SQUISH_CONSTANT_3D;
-			double dy2 = dy0 - 1 - SQUISH_CONSTANT_3D;
-			double dz2 = dz1;
-			double attn2 = 2 - dx2 * dx2 - dy2 * dy2 - dz2 * dz2;
-			if (attn2 > 0)
-			{
-				attn2 *= attn2;
-				value += attn2 * attn2 * extrapolate(xsb + 0, ysb + 1, zsb + 0, dx2, dy2, dz2);
-			}
-
-			//Contribution (0,0,1)
-			double dx3 = dx2;
-			double dy3 = dy1;
-			double dz3 = dz0 - 1 - SQUISH_CONSTANT_3D;
-			double attn3 = 2 - dx3 * dx3 - dy3 * dy3 - dz3 * dz3;
-			if (attn3 > 0)
-			{
-				attn3 *= attn3;
-				value += attn3 * attn3 * extrapolate(xsb + 0, ysb + 0, zsb + 1, dx3, dy3, dz3);
-			}
-		}
-		else if (inSum >= 2)
-		{ //We're inside the tetrahedron (3-Simplex) at (1,1,1)
-
-			//Determine which two tetrahedral vertices are the closest, out of (1,1,0), (1,0,1), (0,1,1) but not (1,1,1).
-			byte aPoint = 0x06;
-			double aScore = xins;
-			byte bPoint = 0x05;
-			double bScore = yins;
-			if (aScore <= bScore && zins < bScore)
-			{
-				bScore = zins;
-				bPoint = 0x03;
-			}
-			else if (aScore > bScore && zins < aScore)
-			{
-				aScore = zins;
-				aPoint = 0x03;
-			}
-
-			//Now we determine the two lattice points not part of the tetrahedron that may contribute.
-			//This depends on the closest two tetrahedral vertices, including (1,1,1)
-			double wins = 3 - inSum;
-			if (wins < aScore || wins < bScore)
-			{ //(1,1,1) is one of the closest two tetrahedral vertices.
-				byte c = (bScore < aScore ? bPoint : aPoint); //Our other closest vertex is the closest out of a and b.
-
-				if ((c & 0x01) != 0)
-				{
-					xsv_ext0 = xsb + 2;
-					xsv_ext1 = xsb + 1;
-					dx_ext0 = dx0 - 2 - 3 * SQUISH_CONSTANT_3D;
-					dx_ext1 = dx0 - 1 - 3 * SQUISH_CONSTANT_3D;
-				}
-				else
-				{
-					xsv_ext0 = xsv_ext1 = xsb;
-					dx_ext0 = dx_ext1 = dx0 - 3 * SQUISH_CONSTANT_3D;
-				}
-
-				if ((c & 0x02) != 0)
-				{
-					ysv_ext0 = ysv_ext1 = ysb + 1;
-					dy_ext0 = dy_ext1 = dy0 - 1 - 3 * SQUISH_CONSTANT_3D;
-					if ((c & 0x01) != 0)
-					{
-						ysv_ext1 += 1;
-						dy_ext1 -= 1;
-					}
-					else
-					{
-						ysv_ext0 += 1;
-						dy_ext0 -= 1;
-					}
-				}
-				else
-				{
-					ysv_ext0 = ysv_ext1 = ysb;
-					dy_ext0 = dy_ext1 = dy0 - 3 * SQUISH_CONSTANT_3D;
-				}
-
-				if ((c & 0x04) != 0)
-				{
-					zsv_ext0 = zsb + 1;
-					zsv_ext1 = zsb + 2;
-					dz_ext0 = dz0 - 1 - 3 * SQUISH_CONSTANT_3D;
-					dz_ext1 = dz0 - 2 - 3 * SQUISH_CONSTANT_3D;
-				}
-				else
-				{
-					zsv_ext0 = zsv_ext1 = zsb;
-					dz_ext0 = dz_ext1 = dz0 - 3 * SQUISH_CONSTANT_3D;
-				}
-			}
-			else
-			{ //(1,1,1) is not one of the closest two tetrahedral vertices.
-				byte c = (byte)(aPoint & bPoint); //Our two extra vertices are determined by the closest two.
-
-				if ((c & 0x01) != 0)
-				{
-					xsv_ext0 = xsb + 1;
-					xsv_ext1 = xsb + 2;
-					dx_ext0 = dx0 - 1 - SQUISH_CONSTANT_3D;
-					dx_ext1 = dx0 - 2 - 2 * SQUISH_CONSTANT_3D;
-				}
-				else
-				{
-					xsv_ext0 = xsv_ext1 = xsb;
-					dx_ext0 = dx0 - SQUISH_CONSTANT_3D;
-					dx_ext1 = dx0 - 2 * SQUISH_CONSTANT_3D;
-				}
-
-				if ((c & 0x02) != 0)
-				{
-					ysv_ext0 = ysb + 1;
-					ysv_ext1 = ysb + 2;
-					dy_ext0 = dy0 - 1 - SQUISH_CONSTANT_3D;
-					dy_ext1 = dy0 - 2 - 2 * SQUISH_CONSTANT_3D;
-				}
-				else
-				{
-					ysv_ext0 = ysv_ext1 = ysb;
-					dy_ext0 = dy0 - SQUISH_CONSTANT_3D;
-					dy_ext1 = dy0 - 2 * SQUISH_CONSTANT_3D;
-				}
-
-				if ((c & 0x04) != 0)
-				{
-					zsv_ext0 = zsb + 1;
-					zsv_ext1 = zsb + 2;
-					dz_ext0 = dz0 - 1 - SQUISH_CONSTANT_3D;
-					dz_ext1 = dz0 - 2 - 2 * SQUISH_CONSTANT_3D;
-				}
-				else
-				{
-					zsv_ext0 = zsv_ext1 = zsb;
-					dz_ext0 = dz0 - SQUISH_CONSTANT_3D;
-					dz_ext1 = dz0 - 2 * SQUISH_CONSTANT_3D;
-				}
-			}
-
-			//Contribution (1,1,0)
-			double dx3 = dx0 - 1 - 2 * SQUISH_CONSTANT_3D;
-			double dy3 = dy0 - 1 - 2 * SQUISH_CONSTANT_3D;
-			double dz3 = dz0 - 0 - 2 * SQUISH_CONSTANT_3D;
-			double attn3 = 2 - dx3 * dx3 - dy3 * dy3 - dz3 * dz3;
-			if (attn3 > 0)
-			{
-				attn3 *= attn3;
-				value += attn3 * attn3 * extrapolate(xsb + 1, ysb + 1, zsb + 0, dx3, dy3, dz3);
-			}
-
-			//Contribution (1,0,1)
-			double dx2 = dx3;
-			double dy2 = dy0 - 0 - 2 * SQUISH_CONSTANT_3D;
-			double dz2 = dz0 - 1 - 2 * SQUISH_CONSTANT_3D;
-			double attn2 = 2 - dx2 * dx2 - dy2 * dy2 - dz2 * dz2;
-			if (attn2 > 0)
-			{
-				attn2 *= attn2;
-				value += attn2 * attn2 * extrapolate(xsb + 1, ysb + 0, zsb + 1, dx2, dy2, dz2);
-			}
-
-			//Contribution (0,1,1)
-			double dx1 = dx0 - 0 - 2 * SQUISH_CONSTANT_3D;
-			double dy1 = dy3;
-			double dz1 = dz2;
-			double attn1 = 2 - dx1 * dx1 - dy1 * dy1 - dz1 * dz1;
-			if (attn1 > 0)
-			{
-				attn1 *= attn1;
-				value += attn1 * attn1 * extrapolate(xsb + 0, ysb + 1, zsb + 1, dx1, dy1, dz1);
-			}
-
-			//Contribution (1,1,1)
-			dx0 = dx0 - 1 - 3 * SQUISH_CONSTANT_3D;
-			dy0 = dy0 - 1 - 3 * SQUISH_CONSTANT_3D;
-			dz0 = dz0 - 1 - 3 * SQUISH_CONSTANT_3D;
-			double attn0 = 2 - dx0 * dx0 - dy0 * dy0 - dz0 * dz0;
-			if (attn0 > 0)
-			{
-				attn0 *= attn0;
-				value += attn0 * attn0 * extrapolate(xsb + 1, ysb + 1, zsb + 1, dx0, dy0, dz0);
-			}
-		}
-		else
-		{ //We're inside the octahedron (Rectified 3-Simplex) in between.
-			double aScore;
-			byte aPoint;
-			bool aIsFurtherSide;
-			double bScore;
-			byte bPoint;
-			bool bIsFurtherSide;
-
-			//Decide between point (0,0,1) and (1,1,0) as closest
-			double p1 = xins + yins;
-			if (p1 > 1)
-			{
-				aScore = p1 - 1;
-				aPoint = 0x03;
-				aIsFurtherSide = true;
-			}
-			else
-			{
-				aScore = 1 - p1;
-				aPoint = 0x04;
-				aIsFurtherSide = false;
-			}
-
-			//Decide between point (0,1,0) and (1,0,1) as closest
-			double p2 = xins + zins;
-			if (p2 > 1)
-			{
-				bScore = p2 - 1;
-				bPoint = 0x05;
-				bIsFurtherSide = true;
-			}
-			else
-			{
-				bScore = 1 - p2;
-				bPoint = 0x02;
-				bIsFurtherSide = false;
-			}
-
-			//The closest out of the two (1,0,0) and (0,1,1) will replace the furthest out of the two decided above, if closer.
-			double p3 = yins + zins;
-			if (p3 > 1)
-			{
-				double score = p3 - 1;
-				if (aScore <= bScore && aScore < score)
-				{
-					aScore = score;
-					aPoint = 0x06;
-					aIsFurtherSide = true;
-				}
-				else if (aScore > bScore && bScore < score)
-				{
-					bScore = score;
-					bPoint = 0x06;
-					bIsFurtherSide = true;
-				}
-			}
-			else
-			{
-				double score = 1 - p3;
-				if (aScore <= bScore && aScore < score)
-				{
-					aScore = score;
-					aPoint = 0x01;
-					aIsFurtherSide = false;
-				}
-				else if (aScore > bScore && bScore < score)
-				{
-					bScore = score;
-					bPoint = 0x01;
-					bIsFurtherSide = false;
-				}
-			}
-
-			//Where each of the two closest points are determines how the extra two vertices are calculated.
-			if (aIsFurtherSide == bIsFurtherSide)
-			{
-				if (aIsFurtherSide)
-				{ //Both closest points on (1,1,1) side
-
-					//One of the two extra points is (1,1,1)
-					dx_ext0 = dx0 - 1 - 3 * SQUISH_CONSTANT_3D;
-					dy_ext0 = dy0 - 1 - 3 * SQUISH_CONSTANT_3D;
-					dz_ext0 = dz0 - 1 - 3 * SQUISH_CONSTANT_3D;
-					xsv_ext0 = xsb + 1;
-					ysv_ext0 = ysb + 1;
-					zsv_ext0 = zsb + 1;
-
-					//Other extra point is based on the shared axis.
-					byte c = (byte)(aPoint & bPoint);
-					if ((c & 0x01) != 0)
-					{
-						dx_ext1 = dx0 - 2 - 2 * SQUISH_CONSTANT_3D;
-						dy_ext1 = dy0 - 2 * SQUISH_CONSTANT_3D;
-						dz_ext1 = dz0 - 2 * SQUISH_CONSTANT_3D;
-						xsv_ext1 = xsb + 2;
-						ysv_ext1 = ysb;
-						zsv_ext1 = zsb;
-					}
-					else if ((c & 0x02) != 0)
-					{
-						dx_ext1 = dx0 - 2 * SQUISH_CONSTANT_3D;
-						dy_ext1 = dy0 - 2 - 2 * SQUISH_CONSTANT_3D;
-						dz_ext1 = dz0 - 2 * SQUISH_CONSTANT_3D;
-						xsv_ext1 = xsb;
-						ysv_ext1 = ysb + 2;
-						zsv_ext1 = zsb;
-					}
-					else
-					{
-						dx_ext1 = dx0 - 2 * SQUISH_CONSTANT_3D;
-						dy_ext1 = dy0 - 2 * SQUISH_CONSTANT_3D;
-						dz_ext1 = dz0 - 2 - 2 * SQUISH_CONSTANT_3D;
-						xsv_ext1 = xsb;
-						ysv_ext1 = ysb;
-						zsv_ext1 = zsb + 2;
-					}
-				}
-				else
-				{//Both closest points on (0,0,0) side
-
-					//One of the two extra points is (0,0,0)
-					dx_ext0 = dx0;
-					dy_ext0 = dy0;
-					dz_ext0 = dz0;
-					xsv_ext0 = xsb;
-					ysv_ext0 = ysb;
-					zsv_ext0 = zsb;
-
-					//Other extra point is based on the omitted axis.
-					byte c = (byte)(aPoint | bPoint);
-					if ((c & 0x01) == 0)
-					{
-						dx_ext1 = dx0 + 1 - SQUISH_CONSTANT_3D;
-						dy_ext1 = dy0 - 1 - SQUISH_CONSTANT_3D;
-						dz_ext1 = dz0 - 1 - SQUISH_CONSTANT_3D;
-						xsv_ext1 = xsb - 1;
-						ysv_ext1 = ysb + 1;
-						zsv_ext1 = zsb + 1;
-					}
-					else if ((c & 0x02) == 0)
-					{
-						dx_ext1 = dx0 - 1 - SQUISH_CONSTANT_3D;
-						dy_ext1 = dy0 + 1 - SQUISH_CONSTANT_3D;
-						dz_ext1 = dz0 - 1 - SQUISH_CONSTANT_3D;
-						xsv_ext1 = xsb + 1;
-						ysv_ext1 = ysb - 1;
-						zsv_ext1 = zsb + 1;
-					}
-					else
-					{
-						dx_ext1 = dx0 - 1 - SQUISH_CONSTANT_3D;
-						dy_ext1 = dy0 - 1 - SQUISH_CONSTANT_3D;
-						dz_ext1 = dz0 + 1 - SQUISH_CONSTANT_3D;
-						xsv_ext1 = xsb + 1;
-						ysv_ext1 = ysb + 1;
-						zsv_ext1 = zsb - 1;
-					}
-				}
-			}
-			else
-			{ //One point on (0,0,0) side, one point on (1,1,1) side
-				byte c1, c2;
-				if (aIsFurtherSide)
-				{
-					c1 = aPoint;
-					c2 = bPoint;
-				}
-				else
-				{
-					c1 = bPoint;
-					c2 = aPoint;
-				}
-
-				//One contribution is a permutation of (1,1,-1)
-				if ((c1 & 0x01) == 0)
-				{
-					dx_ext0 = dx0 + 1 - SQUISH_CONSTANT_3D;
-					dy_ext0 = dy0 - 1 - SQUISH_CONSTANT_3D;
-					dz_ext0 = dz0 - 1 - SQUISH_CONSTANT_3D;
-					xsv_ext0 = xsb - 1;
-					ysv_ext0 = ysb + 1;
-					zsv_ext0 = zsb + 1;
-				}
-				else if ((c1 & 0x02) == 0)
-				{
-					dx_ext0 = dx0 - 1 - SQUISH_CONSTANT_3D;
-					dy_ext0 = dy0 + 1 - SQUISH_CONSTANT_3D;
-					dz_ext0 = dz0 - 1 - SQUISH_CONSTANT_3D;
-					xsv_ext0 = xsb + 1;
-					ysv_ext0 = ysb - 1;
-					zsv_ext0 = zsb + 1;
-				}
-				else
-				{
-					dx_ext0 = dx0 - 1 - SQUISH_CONSTANT_3D;
-					dy_ext0 = dy0 - 1 - SQUISH_CONSTANT_3D;
-					dz_ext0 = dz0 + 1 - SQUISH_CONSTANT_3D;
-					xsv_ext0 = xsb + 1;
-					ysv_ext0 = ysb + 1;
-					zsv_ext0 = zsb - 1;
-				}
-
-				//One contribution is a permutation of (0,0,2)
-				dx_ext1 = dx0 - 2 * SQUISH_CONSTANT_3D;
-				dy_ext1 = dy0 - 2 * SQUISH_CONSTANT_3D;
-				dz_ext1 = dz0 - 2 * SQUISH_CONSTANT_3D;
-				xsv_ext1 = xsb;
-				ysv_ext1 = ysb;
-				zsv_ext1 = zsb;
-				if ((c2 & 0x01) != 0)
-				{
-					dx_ext1 -= 2;
-					xsv_ext1 += 2;
-				}
-				else if ((c2 & 0x02) != 0)
-				{
-					dy_ext1 -= 2;
-					ysv_ext1 += 2;
-				}
-				else
-				{
-					dz_ext1 -= 2;
-					zsv_ext1 += 2;
-				}
-			}
-
-			//Contribution (1,0,0)
-			double dx1 = dx0 - 1 - SQUISH_CONSTANT_3D;
-			double dy1 = dy0 - 0 - SQUISH_CONSTANT_3D;
-			double dz1 = dz0 - 0 - SQUISH_CONSTANT_3D;
-			double attn1 = 2 - dx1 * dx1 - dy1 * dy1 - dz1 * dz1;
-			if (attn1 > 0)
-			{
-				attn1 *= attn1;
-				value += attn1 * attn1 * extrapolate(xsb + 1, ysb + 0, zsb + 0, dx1, dy1, dz1);
-			}
-
-			//Contribution (0,1,0)
-			double dx2 = dx0 - 0 - SQUISH_CONSTANT_3D;
-			double dy2 = dy0 - 1 - SQUISH_CONSTANT_3D;
-			double dz2 = dz1;
-			double attn2 = 2 - dx2 * dx2 - dy2 * dy2 - dz2 * dz2;
-			if (attn2 > 0)
-			{
-				attn2 *= attn2;
-				value += attn2 * attn2 * extrapolate(xsb + 0, ysb + 1, zsb + 0, dx2, dy2, dz2);
-			}
-
-			//Contribution (0,0,1)
-			double dx3 = dx2;
-			double dy3 = dy1;
-			double dz3 = dz0 - 1 - SQUISH_CONSTANT_3D;
-			double attn3 = 2 - dx3 * dx3 - dy3 * dy3 - dz3 * dz3;
-			if (attn3 > 0)
-			{
-				attn3 *= attn3;
-				value += attn3 * attn3 * extrapolate(xsb + 0, ysb + 0, zsb + 1, dx3, dy3, dz3);
-			}
-
-			//Contribution (1,1,0)
-			double dx4 = dx0 - 1 - 2 * SQUISH_CONSTANT_3D;
-			double dy4 = dy0 - 1 - 2 * SQUISH_CONSTANT_3D;
-			double dz4 = dz0 - 0 - 2 * SQUISH_CONSTANT_3D;
-			double attn4 = 2 - dx4 * dx4 - dy4 * dy4 - dz4 * dz4;
-			if (attn4 > 0)
-			{
-				attn4 *= attn4;
-				value += attn4 * attn4 * extrapolate(xsb + 1, ysb + 1, zsb + 0, dx4, dy4, dz4);
-			}
-
-			//Contribution (1,0,1)
-			double dx5 = dx4;
-			double dy5 = dy0 - 0 - 2 * SQUISH_CONSTANT_3D;
-			double dz5 = dz0 - 1 - 2 * SQUISH_CONSTANT_3D;
-			double attn5 = 2 - dx5 * dx5 - dy5 * dy5 - dz5 * dz5;
-			if (attn5 > 0)
-			{
-				attn5 *= attn5;
-				value += attn5 * attn5 * extrapolate(xsb + 1, ysb + 0, zsb + 1, dx5, dy5, dz5);
-			}
-
-			//Contribution (0,1,1)
-			double dx6 = dx0 - 0 - 2 * SQUISH_CONSTANT_3D;
-			double dy6 = dy4;
-			double dz6 = dz5;
-			double attn6 = 2 - dx6 * dx6 - dy6 * dy6 - dz6 * dz6;
-			if (attn6 > 0)
-			{
-				attn6 *= attn6;
-				value += attn6 * attn6 * extrapolate(xsb + 0, ysb + 1, zsb + 1, dx6, dy6, dz6);
-			}
-		}
-
-		//First extra vertex
-		double attn_ext0 = 2 - dx_ext0 * dx_ext0 - dy_ext0 * dy_ext0 - dz_ext0 * dz_ext0;
-		if (attn_ext0 > 0)
-		{
-			attn_ext0 *= attn_ext0;
-			value += attn_ext0 * attn_ext0 * extrapolate(xsv_ext0, ysv_ext0, zsv_ext0, dx_ext0, dy_ext0, dz_ext0);
-		}
-
-		//Second extra vertex
-		double attn_ext1 = 2 - dx_ext1 * dx_ext1 - dy_ext1 * dy_ext1 - dz_ext1 * dz_ext1;
-		if (attn_ext1 > 0)
-		{
-			attn_ext1 *= attn_ext1;
-			value += attn_ext1 * attn_ext1 * extrapolate(xsv_ext1, ysv_ext1, zsv_ext1, dx_ext1, dy_ext1, dz_ext1);
-		}
-
-		return value / NORM_CONSTANT_3D;
-	}
-
-	//4D OpenSimplex Noise.
-	public double noise(double x, double y, double z, double w)
-	{
-
-		//Place input coordinates on simplectic honeycomb.
-		double stretchOffset = (x + y + z + w) * STRETCH_CONSTANT_4D;
-		double xs = x + stretchOffset;
-		double ys = y + stretchOffset;
-		double zs = z + stretchOffset;
-		double ws = w + stretchOffset;
-
-		//Floor to get simplectic honeycomb coordinates of rhombo-hypercube super-cell origin.
-		int xsb = fastFloor(xs);
-		int ysb = fastFloor(ys);
-		int zsb = fastFloor(zs);
-		int wsb = fastFloor(ws);
-
-		//Skew out to get actual coordinates of stretched rhombo-hypercube origin. We'll need these later.
-		double squishOffset = (xsb + ysb + zsb + wsb) * SQUISH_CONSTANT_4D;
-		double xb = xsb + squishOffset;
-		double yb = ysb + squishOffset;
-		double zb = zsb + squishOffset;
-		double wb = wsb + squishOffset;
-
-		//Compute simplectic honeycomb coordinates relative to rhombo-hypercube origin.
-		double xins = xs - xsb;
-		double yins = ys - ysb;
-		double zins = zs - zsb;
-		double wins = ws - wsb;
-
-		//Sum those together to get a value that determines which region we're in.
-		double inSum = xins + yins + zins + wins;
-
-		//Positions relative to origin point.
-		double dx0 = x - xb;
-		double dy0 = y - yb;
-		double dz0 = z - zb;
-		double dw0 = w - wb;
-
-		//We'll be defining these inside the next block and using them afterwards.
-		double dx_ext0, dy_ext0, dz_ext0, dw_ext0;
-		double dx_ext1, dy_ext1, dz_ext1, dw_ext1;
-		double dx_ext2, dy_ext2, dz_ext2, dw_ext2;
-		int xsv_ext0, ysv_ext0, zsv_ext0, wsv_ext0;
-		int xsv_ext1, ysv_ext1, zsv_ext1, wsv_ext1;
-		int xsv_ext2, ysv_ext2, zsv_ext2, wsv_ext2;
-
-		double value = 0;
-		if (inSum <= 1)
-		{ //We're inside the pentachoron (4-Simplex) at (0,0,0,0)
-
-			//Determine which two of (0,0,0,1), (0,0,1,0), (0,1,0,0), (1,0,0,0) are closest.
-			byte aPoint = 0x01;
-			double aScore = xins;
-			byte bPoint = 0x02;
-			double bScore = yins;
-			if (aScore >= bScore && zins > bScore)
-			{
-				bScore = zins;
-				bPoint = 0x04;
-			}
-			else if (aScore < bScore && zins > aScore)
-			{
-				aScore = zins;
-				aPoint = 0x04;
-			}
-			if (aScore >= bScore && wins > bScore)
-			{
-				bScore = wins;
-				bPoint = 0x08;
-			}
-			else if (aScore < bScore && wins > aScore)
-			{
-				aScore = wins;
-				aPoint = 0x08;
-			}
-
-			//Now we determine the three lattice points not part of the pentachoron that may contribute.
-			//This depends on the closest two pentachoron vertices, including (0,0,0,0)
-			double uins = 1 - inSum;
-			if (uins > aScore || uins > bScore)
-			{ //(0,0,0,0) is one of the closest two pentachoron vertices.
-				byte c = (bScore > aScore ? bPoint : aPoint); //Our other closest vertex is the closest out of a and b.
-				if ((c & 0x01) == 0)
-				{
-					xsv_ext0 = xsb - 1;
-					xsv_ext1 = xsv_ext2 = xsb;
-					dx_ext0 = dx0 + 1;
-					dx_ext1 = dx_ext2 = dx0;
-				}
-				else
-				{
-					xsv_ext0 = xsv_ext1 = xsv_ext2 = xsb + 1;
-					dx_ext0 = dx_ext1 = dx_ext2 = dx0 - 1;
-				}
-
-				if ((c & 0x02) == 0)
-				{
-					ysv_ext0 = ysv_ext1 = ysv_ext2 = ysb;
-					dy_ext0 = dy_ext1 = dy_ext2 = dy0;
-					if ((c & 0x01) == 0x01)
-					{
-						ysv_ext0 -= 1;
-						dy_ext0 += 1;
-					}
-					else
-					{
-						ysv_ext1 -= 1;
-						dy_ext1 += 1;
-					}
-				}
-				else
-				{
-					ysv_ext0 = ysv_ext1 = ysv_ext2 = ysb + 1;
-					dy_ext0 = dy_ext1 = dy_ext2 = dy0 - 1;
-				}
-
-				if ((c & 0x04) == 0)
-				{
-					zsv_ext0 = zsv_ext1 = zsv_ext2 = zsb;
-					dz_ext0 = dz_ext1 = dz_ext2 = dz0;
-					if ((c & 0x03) != 0)
-					{
-						if ((c & 0x03) == 0x03)
-						{
-							zsv_ext0 -= 1;
-							dz_ext0 += 1;
-						}
-						else
-						{
-							zsv_ext1 -= 1;
-							dz_ext1 += 1;
-						}
-					}
-					else
-					{
-						zsv_ext2 -= 1;
-						dz_ext2 += 1;
-					}
-				}
-				else
-				{
-					zsv_ext0 = zsv_ext1 = zsv_ext2 = zsb + 1;
-					dz_ext0 = dz_ext1 = dz_ext2 = dz0 - 1;
-				}
-
-				if ((c & 0x08) == 0)
-				{
-					wsv_ext0 = wsv_ext1 = wsb;
-					wsv_ext2 = wsb - 1;
-					dw_ext0 = dw_ext1 = dw0;
-					dw_ext2 = dw0 + 1;
-				}
-				else
-				{
-					wsv_ext0 = wsv_ext1 = wsv_ext2 = wsb + 1;
-					dw_ext0 = dw_ext1 = dw_ext2 = dw0 - 1;
-				}
-			}
-			else
-			{ //(0,0,0,0) is not one of the closest two pentachoron vertices.
-				byte c = (byte)(aPoint | bPoint); //Our three extra vertices are determined by the closest two.
-
-				if ((c & 0x01) == 0)
-				{
-					xsv_ext0 = xsv_ext2 = xsb;
-					xsv_ext1 = xsb - 1;
-					dx_ext0 = dx0 - 2 * SQUISH_CONSTANT_4D;
-					dx_ext1 = dx0 + 1 - SQUISH_CONSTANT_4D;
-					dx_ext2 = dx0 - SQUISH_CONSTANT_4D;
-				}
-				else
-				{
-					xsv_ext0 = xsv_ext1 = xsv_ext2 = xsb + 1;
-					dx_ext0 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dx_ext1 = dx_ext2 = dx0 - 1 - SQUISH_CONSTANT_4D;
-				}
-
-				if ((c & 0x02) == 0)
-				{
-					ysv_ext0 = ysv_ext1 = ysv_ext2 = ysb;
-					dy_ext0 = dy0 - 2 * SQUISH_CONSTANT_4D;
-					dy_ext1 = dy_ext2 = dy0 - SQUISH_CONSTANT_4D;
-					if ((c & 0x01) == 0x01)
-					{
-						ysv_ext1 -= 1;
-						dy_ext1 += 1;
-					}
-					else
-					{
-						ysv_ext2 -= 1;
-						dy_ext2 += 1;
-					}
-				}
-				else
-				{
-					ysv_ext0 = ysv_ext1 = ysv_ext2 = ysb + 1;
-					dy_ext0 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dy_ext1 = dy_ext2 = dy0 - 1 - SQUISH_CONSTANT_4D;
-				}
-
-				if ((c & 0x04) == 0)
-				{
-					zsv_ext0 = zsv_ext1 = zsv_ext2 = zsb;
-					dz_ext0 = dz0 - 2 * SQUISH_CONSTANT_4D;
-					dz_ext1 = dz_ext2 = dz0 - SQUISH_CONSTANT_4D;
-					if ((c & 0x03) == 0x03)
-					{
-						zsv_ext1 -= 1;
-						dz_ext1 += 1;
-					}
-					else
-					{
-						zsv_ext2 -= 1;
-						dz_ext2 += 1;
-					}
-				}
-				else
-				{
-					zsv_ext0 = zsv_ext1 = zsv_ext2 = zsb + 1;
-					dz_ext0 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dz_ext1 = dz_ext2 = dz0 - 1 - SQUISH_CONSTANT_4D;
-				}
-
-				if ((c & 0x08) == 0)
-				{
-					wsv_ext0 = wsv_ext1 = wsb;
-					wsv_ext2 = wsb - 1;
-					dw_ext0 = dw0 - 2 * SQUISH_CONSTANT_4D;
-					dw_ext1 = dw0 - SQUISH_CONSTANT_4D;
-					dw_ext2 = dw0 + 1 - SQUISH_CONSTANT_4D;
-				}
-				else
-				{
-					wsv_ext0 = wsv_ext1 = wsv_ext2 = wsb + 1;
-					dw_ext0 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dw_ext1 = dw_ext2 = dw0 - 1 - SQUISH_CONSTANT_4D;
-				}
-			}
-
-			//Contribution (0,0,0,0)
-			double attn0 = 2 - dx0 * dx0 - dy0 * dy0 - dz0 * dz0 - dw0 * dw0;
-			if (attn0 > 0)
-			{
-				attn0 *= attn0;
-				value += attn0 * attn0 * extrapolate(xsb + 0, ysb + 0, zsb + 0, wsb + 0, dx0, dy0, dz0, dw0);
-			}
-
-			//Contribution (1,0,0,0)
-			double dx1 = dx0 - 1 - SQUISH_CONSTANT_4D;
-			double dy1 = dy0 - 0 - SQUISH_CONSTANT_4D;
-			double dz1 = dz0 - 0 - SQUISH_CONSTANT_4D;
-			double dw1 = dw0 - 0 - SQUISH_CONSTANT_4D;
-			double attn1 = 2 - dx1 * dx1 - dy1 * dy1 - dz1 * dz1 - dw1 * dw1;
-			if (attn1 > 0)
-			{
-				attn1 *= attn1;
-				value += attn1 * attn1 * extrapolate(xsb + 1, ysb + 0, zsb + 0, wsb + 0, dx1, dy1, dz1, dw1);
-			}
-
-			//Contribution (0,1,0,0)
-			double dx2 = dx0 - 0 - SQUISH_CONSTANT_4D;
-			double dy2 = dy0 - 1 - SQUISH_CONSTANT_4D;
-			double dz2 = dz1;
-			double dw2 = dw1;
-			double attn2 = 2 - dx2 * dx2 - dy2 * dy2 - dz2 * dz2 - dw2 * dw2;
-			if (attn2 > 0)
-			{
-				attn2 *= attn2;
-				value += attn2 * attn2 * extrapolate(xsb + 0, ysb + 1, zsb + 0, wsb + 0, dx2, dy2, dz2, dw2);
-			}
-
-			//Contribution (0,0,1,0)
-			double dx3 = dx2;
-			double dy3 = dy1;
-			double dz3 = dz0 - 1 - SQUISH_CONSTANT_4D;
-			double dw3 = dw1;
-			double attn3 = 2 - dx3 * dx3 - dy3 * dy3 - dz3 * dz3 - dw3 * dw3;
-			if (attn3 > 0)
-			{
-				attn3 *= attn3;
-				value += attn3 * attn3 * extrapolate(xsb + 0, ysb + 0, zsb + 1, wsb + 0, dx3, dy3, dz3, dw3);
-			}
-
-			//Contribution (0,0,0,1)
-			double dx4 = dx2;
-			double dy4 = dy1;
-			double dz4 = dz1;
-			double dw4 = dw0 - 1 - SQUISH_CONSTANT_4D;
-			double attn4 = 2 - dx4 * dx4 - dy4 * dy4 - dz4 * dz4 - dw4 * dw4;
-			if (attn4 > 0)
-			{
-				attn4 *= attn4;
-				value += attn4 * attn4 * extrapolate(xsb + 0, ysb + 0, zsb + 0, wsb + 1, dx4, dy4, dz4, dw4);
-			}
-		}
-		else if (inSum >= 3)
-		{ //We're inside the pentachoron (4-Simplex) at (1,1,1,1)
-		  //Determine which two of (1,1,1,0), (1,1,0,1), (1,0,1,1), (0,1,1,1) are closest.
-			byte aPoint = 0x0E;
-			double aScore = xins;
-			byte bPoint = 0x0D;
-			double bScore = yins;
-			if (aScore <= bScore && zins < bScore)
-			{
-				bScore = zins;
-				bPoint = 0x0B;
-			}
-			else if (aScore > bScore && zins < aScore)
-			{
-				aScore = zins;
-				aPoint = 0x0B;
-			}
-			if (aScore <= bScore && wins < bScore)
-			{
-				bScore = wins;
-				bPoint = 0x07;
-			}
-			else if (aScore > bScore && wins < aScore)
-			{
-				aScore = wins;
-				aPoint = 0x07;
-			}
-
-			//Now we determine the three lattice points not part of the pentachoron that may contribute.
-			//This depends on the closest two pentachoron vertices, including (0,0,0,0)
-			double uins = 4 - inSum;
-			if (uins < aScore || uins < bScore)
-			{ //(1,1,1,1) is one of the closest two pentachoron vertices.
-				byte c = (bScore < aScore ? bPoint : aPoint); //Our other closest vertex is the closest out of a and b.
-
-				if ((c & 0x01) != 0)
-				{
-					xsv_ext0 = xsb + 2;
-					xsv_ext1 = xsv_ext2 = xsb + 1;
-					dx_ext0 = dx0 - 2 - 4 * SQUISH_CONSTANT_4D;
-					dx_ext1 = dx_ext2 = dx0 - 1 - 4 * SQUISH_CONSTANT_4D;
-				}
-				else
-				{
-					xsv_ext0 = xsv_ext1 = xsv_ext2 = xsb;
-					dx_ext0 = dx_ext1 = dx_ext2 = dx0 - 4 * SQUISH_CONSTANT_4D;
-				}
-
-				if ((c & 0x02) != 0)
-				{
-					ysv_ext0 = ysv_ext1 = ysv_ext2 = ysb + 1;
-					dy_ext0 = dy_ext1 = dy_ext2 = dy0 - 1 - 4 * SQUISH_CONSTANT_4D;
-					if ((c & 0x01) != 0)
-					{
-						ysv_ext1 += 1;
-						dy_ext1 -= 1;
-					}
-					else
-					{
-						ysv_ext0 += 1;
-						dy_ext0 -= 1;
-					}
-				}
-				else
-				{
-					ysv_ext0 = ysv_ext1 = ysv_ext2 = ysb;
-					dy_ext0 = dy_ext1 = dy_ext2 = dy0 - 4 * SQUISH_CONSTANT_4D;
-				}
-
-				if ((c & 0x04) != 0)
-				{
-					zsv_ext0 = zsv_ext1 = zsv_ext2 = zsb + 1;
-					dz_ext0 = dz_ext1 = dz_ext2 = dz0 - 1 - 4 * SQUISH_CONSTANT_4D;
-					if ((c & 0x03) != 0x03)
-					{
-						if ((c & 0x03) == 0)
-						{
-							zsv_ext0 += 1;
-							dz_ext0 -= 1;
-						}
-						else
-						{
-							zsv_ext1 += 1;
-							dz_ext1 -= 1;
-						}
-					}
-					else
-					{
-						zsv_ext2 += 1;
-						dz_ext2 -= 1;
-					}
-				}
-				else
-				{
-					zsv_ext0 = zsv_ext1 = zsv_ext2 = zsb;
-					dz_ext0 = dz_ext1 = dz_ext2 = dz0 - 4 * SQUISH_CONSTANT_4D;
-				}
-
-				if ((c & 0x08) != 0)
-				{
-					wsv_ext0 = wsv_ext1 = wsb + 1;
-					wsv_ext2 = wsb + 2;
-					dw_ext0 = dw_ext1 = dw0 - 1 - 4 * SQUISH_CONSTANT_4D;
-					dw_ext2 = dw0 - 2 - 4 * SQUISH_CONSTANT_4D;
-				}
-				else
-				{
-					wsv_ext0 = wsv_ext1 = wsv_ext2 = wsb;
-					dw_ext0 = dw_ext1 = dw_ext2 = dw0 - 4 * SQUISH_CONSTANT_4D;
-				}
-			}
-			else
-			{ //(1,1,1,1) is not one of the closest two pentachoron vertices.
-				byte c = (byte)(aPoint & bPoint); //Our three extra vertices are determined by the closest two.
-
-				if ((c & 0x01) != 0)
-				{
-					xsv_ext0 = xsv_ext2 = xsb + 1;
-					xsv_ext1 = xsb + 2;
-					dx_ext0 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dx_ext1 = dx0 - 2 - 3 * SQUISH_CONSTANT_4D;
-					dx_ext2 = dx0 - 1 - 3 * SQUISH_CONSTANT_4D;
-				}
-				else
-				{
-					xsv_ext0 = xsv_ext1 = xsv_ext2 = xsb;
-					dx_ext0 = dx0 - 2 * SQUISH_CONSTANT_4D;
-					dx_ext1 = dx_ext2 = dx0 - 3 * SQUISH_CONSTANT_4D;
-				}
-
-				if ((c & 0x02) != 0)
-				{
-					ysv_ext0 = ysv_ext1 = ysv_ext2 = ysb + 1;
-					dy_ext0 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dy_ext1 = dy_ext2 = dy0 - 1 - 3 * SQUISH_CONSTANT_4D;
-					if ((c & 0x01) != 0)
-					{
-						ysv_ext2 += 1;
-						dy_ext2 -= 1;
-					}
-					else
-					{
-						ysv_ext1 += 1;
-						dy_ext1 -= 1;
-					}
-				}
-				else
-				{
-					ysv_ext0 = ysv_ext1 = ysv_ext2 = ysb;
-					dy_ext0 = dy0 - 2 * SQUISH_CONSTANT_4D;
-					dy_ext1 = dy_ext2 = dy0 - 3 * SQUISH_CONSTANT_4D;
-				}
-
-				if ((c & 0x04) != 0)
-				{
-					zsv_ext0 = zsv_ext1 = zsv_ext2 = zsb + 1;
-					dz_ext0 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dz_ext1 = dz_ext2 = dz0 - 1 - 3 * SQUISH_CONSTANT_4D;
-					if ((c & 0x03) != 0)
-					{
-						zsv_ext2 += 1;
-						dz_ext2 -= 1;
-					}
-					else
-					{
-						zsv_ext1 += 1;
-						dz_ext1 -= 1;
-					}
-				}
-				else
-				{
-					zsv_ext0 = zsv_ext1 = zsv_ext2 = zsb;
-					dz_ext0 = dz0 - 2 * SQUISH_CONSTANT_4D;
-					dz_ext1 = dz_ext2 = dz0 - 3 * SQUISH_CONSTANT_4D;
-				}
-
-				if ((c & 0x08) != 0)
-				{
-					wsv_ext0 = wsv_ext1 = wsb + 1;
-					wsv_ext2 = wsb + 2;
-					dw_ext0 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dw_ext1 = dw0 - 1 - 3 * SQUISH_CONSTANT_4D;
-					dw_ext2 = dw0 - 2 - 3 * SQUISH_CONSTANT_4D;
-				}
-				else
-				{
-					wsv_ext0 = wsv_ext1 = wsv_ext2 = wsb;
-					dw_ext0 = dw0 - 2 * SQUISH_CONSTANT_4D;
-					dw_ext1 = dw_ext2 = dw0 - 3 * SQUISH_CONSTANT_4D;
-				}
-			}
-
-			//Contribution (1,1,1,0)
-			double dx4 = dx0 - 1 - 3 * SQUISH_CONSTANT_4D;
-			double dy4 = dy0 - 1 - 3 * SQUISH_CONSTANT_4D;
-			double dz4 = dz0 - 1 - 3 * SQUISH_CONSTANT_4D;
-			double dw4 = dw0 - 3 * SQUISH_CONSTANT_4D;
-			double attn4 = 2 - dx4 * dx4 - dy4 * dy4 - dz4 * dz4 - dw4 * dw4;
-			if (attn4 > 0)
-			{
-				attn4 *= attn4;
-				value += attn4 * attn4 * extrapolate(xsb + 1, ysb + 1, zsb + 1, wsb + 0, dx4, dy4, dz4, dw4);
-			}
-
-			//Contribution (1,1,0,1)
-			double dx3 = dx4;
-			double dy3 = dy4;
-			double dz3 = dz0 - 3 * SQUISH_CONSTANT_4D;
-			double dw3 = dw0 - 1 - 3 * SQUISH_CONSTANT_4D;
-			double attn3 = 2 - dx3 * dx3 - dy3 * dy3 - dz3 * dz3 - dw3 * dw3;
-			if (attn3 > 0)
-			{
-				attn3 *= attn3;
-				value += attn3 * attn3 * extrapolate(xsb + 1, ysb + 1, zsb + 0, wsb + 1, dx3, dy3, dz3, dw3);
-			}
-
-			//Contribution (1,0,1,1)
-			double dx2 = dx4;
-			double dy2 = dy0 - 3 * SQUISH_CONSTANT_4D;
-			double dz2 = dz4;
-			double dw2 = dw3;
-			double attn2 = 2 - dx2 * dx2 - dy2 * dy2 - dz2 * dz2 - dw2 * dw2;
-			if (attn2 > 0)
-			{
-				attn2 *= attn2;
-				value += attn2 * attn2 * extrapolate(xsb + 1, ysb + 0, zsb + 1, wsb + 1, dx2, dy2, dz2, dw2);
-			}
-
-			//Contribution (0,1,1,1)
-			double dx1 = dx0 - 3 * SQUISH_CONSTANT_4D;
-			double dz1 = dz4;
-			double dy1 = dy4;
-			double dw1 = dw3;
-			double attn1 = 2 - dx1 * dx1 - dy1 * dy1 - dz1 * dz1 - dw1 * dw1;
-			if (attn1 > 0)
-			{
-				attn1 *= attn1;
-				value += attn1 * attn1 * extrapolate(xsb + 0, ysb + 1, zsb + 1, wsb + 1, dx1, dy1, dz1, dw1);
-			}
-
-			//Contribution (1,1,1,1)
-			dx0 = dx0 - 1 - 4 * SQUISH_CONSTANT_4D;
-			dy0 = dy0 - 1 - 4 * SQUISH_CONSTANT_4D;
-			dz0 = dz0 - 1 - 4 * SQUISH_CONSTANT_4D;
-			dw0 = dw0 - 1 - 4 * SQUISH_CONSTANT_4D;
-			double attn0 = 2 - dx0 * dx0 - dy0 * dy0 - dz0 * dz0 - dw0 * dw0;
-			if (attn0 > 0)
-			{
-				attn0 *= attn0;
-				value += attn0 * attn0 * extrapolate(xsb + 1, ysb + 1, zsb + 1, wsb + 1, dx0, dy0, dz0, dw0);
-			}
-		}
-		else if (inSum <= 2)
-		{ //We're inside the first dispentachoron (Rectified 4-Simplex)
-			double aScore;
-			byte aPoint;
-			bool aIsBiggerSide = true;
-			double bScore;
-			byte bPoint;
-			bool bIsBiggerSide = true;
-
-			//Decide between (1,1,0,0) and (0,0,1,1)
-			if (xins + yins > zins + wins)
-			{
-				aScore = xins + yins;
-				aPoint = 0x03;
-			}
-			else
-			{
-				aScore = zins + wins;
-				aPoint = 0x0C;
-			}
-
-			//Decide between (1,0,1,0) and (0,1,0,1)
-			if (xins + zins > yins + wins)
-			{
-				bScore = xins + zins;
-				bPoint = 0x05;
-			}
-			else
-			{
-				bScore = yins + wins;
-				bPoint = 0x0A;
-			}
-
-			//Closer between (1,0,0,1) and (0,1,1,0) will replace the further of a and b, if closer.
-			if (xins + wins > yins + zins)
-			{
-				double score = xins + wins;
-				if (aScore >= bScore && score > bScore)
-				{
-					bScore = score;
-					bPoint = 0x09;
-				}
-				else if (aScore < bScore && score > aScore)
-				{
-					aScore = score;
-					aPoint = 0x09;
-				}
-			}
-			else
-			{
-				double score = yins + zins;
-				if (aScore >= bScore && score > bScore)
-				{
-					bScore = score;
-					bPoint = 0x06;
-				}
-				else if (aScore < bScore && score > aScore)
-				{
-					aScore = score;
-					aPoint = 0x06;
-				}
-			}
-
-			//Decide if (1,0,0,0) is closer.
-			double p1 = 2 - inSum + xins;
-			if (aScore >= bScore && p1 > bScore)
-			{
-				bScore = p1;
-				bPoint = 0x01;
-				bIsBiggerSide = false;
-			}
-			else if (aScore < bScore && p1 > aScore)
-			{
-				aScore = p1;
-				aPoint = 0x01;
-				aIsBiggerSide = false;
-			}
-
-			//Decide if (0,1,0,0) is closer.
-			double p2 = 2 - inSum + yins;
-			if (aScore >= bScore && p2 > bScore)
-			{
-				bScore = p2;
-				bPoint = 0x02;
-				bIsBiggerSide = false;
-			}
-			else if (aScore < bScore && p2 > aScore)
-			{
-				aScore = p2;
-				aPoint = 0x02;
-				aIsBiggerSide = false;
-			}
-
-			//Decide if (0,0,1,0) is closer.
-			double p3 = 2 - inSum + zins;
-			if (aScore >= bScore && p3 > bScore)
-			{
-				bScore = p3;
-				bPoint = 0x04;
-				bIsBiggerSide = false;
-			}
-			else if (aScore < bScore && p3 > aScore)
-			{
-				aScore = p3;
-				aPoint = 0x04;
-				aIsBiggerSide = false;
-			}
-
-			//Decide if (0,0,0,1) is closer.
-			double p4 = 2 - inSum + wins;
-			if (aScore >= bScore && p4 > bScore)
-			{
-				bScore = p4;
-				bPoint = 0x08;
-				bIsBiggerSide = false;
-			}
-			else if (aScore < bScore && p4 > aScore)
-			{
-				aScore = p4;
-				aPoint = 0x08;
-				aIsBiggerSide = false;
-			}
-
-			//Where each of the two closest points are determines how the extra three vertices are calculated.
-			if (aIsBiggerSide == bIsBiggerSide)
-			{
-				if (aIsBiggerSide)
-				{ //Both closest points on the bigger side
-					byte c1 = (byte)(aPoint | bPoint);
-					byte c2 = (byte)(aPoint & bPoint);
-					if ((c1 & 0x01) == 0)
-					{
-						xsv_ext0 = xsb;
-						xsv_ext1 = xsb - 1;
-						dx_ext0 = dx0 - 3 * SQUISH_CONSTANT_4D;
-						dx_ext1 = dx0 + 1 - 2 * SQUISH_CONSTANT_4D;
-					}
-					else
-					{
-						xsv_ext0 = xsv_ext1 = xsb + 1;
-						dx_ext0 = dx0 - 1 - 3 * SQUISH_CONSTANT_4D;
-						dx_ext1 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					}
-
-					if ((c1 & 0x02) == 0)
-					{
-						ysv_ext0 = ysb;
-						ysv_ext1 = ysb - 1;
-						dy_ext0 = dy0 - 3 * SQUISH_CONSTANT_4D;
-						dy_ext1 = dy0 + 1 - 2 * SQUISH_CONSTANT_4D;
-					}
-					else
-					{
-						ysv_ext0 = ysv_ext1 = ysb + 1;
-						dy_ext0 = dy0 - 1 - 3 * SQUISH_CONSTANT_4D;
-						dy_ext1 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					}
-
-					if ((c1 & 0x04) == 0)
-					{
-						zsv_ext0 = zsb;
-						zsv_ext1 = zsb - 1;
-						dz_ext0 = dz0 - 3 * SQUISH_CONSTANT_4D;
-						dz_ext1 = dz0 + 1 - 2 * SQUISH_CONSTANT_4D;
-					}
-					else
-					{
-						zsv_ext0 = zsv_ext1 = zsb + 1;
-						dz_ext0 = dz0 - 1 - 3 * SQUISH_CONSTANT_4D;
-						dz_ext1 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					}
-
-					if ((c1 & 0x08) == 0)
-					{
-						wsv_ext0 = wsb;
-						wsv_ext1 = wsb - 1;
-						dw_ext0 = dw0 - 3 * SQUISH_CONSTANT_4D;
-						dw_ext1 = dw0 + 1 - 2 * SQUISH_CONSTANT_4D;
-					}
-					else
-					{
-						wsv_ext0 = wsv_ext1 = wsb + 1;
-						dw_ext0 = dw0 - 1 - 3 * SQUISH_CONSTANT_4D;
-						dw_ext1 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					}
-
-					//One combination is a permutation of (0,0,0,2) based on c2
-					xsv_ext2 = xsb;
-					ysv_ext2 = ysb;
-					zsv_ext2 = zsb;
-					wsv_ext2 = wsb;
-					dx_ext2 = dx0 - 2 * SQUISH_CONSTANT_4D;
-					dy_ext2 = dy0 - 2 * SQUISH_CONSTANT_4D;
-					dz_ext2 = dz0 - 2 * SQUISH_CONSTANT_4D;
-					dw_ext2 = dw0 - 2 * SQUISH_CONSTANT_4D;
-					if ((c2 & 0x01) != 0)
-					{
-						xsv_ext2 += 2;
-						dx_ext2 -= 2;
-					}
-					else if ((c2 & 0x02) != 0)
-					{
-						ysv_ext2 += 2;
-						dy_ext2 -= 2;
-					}
-					else if ((c2 & 0x04) != 0)
-					{
-						zsv_ext2 += 2;
-						dz_ext2 -= 2;
-					}
-					else
-					{
-						wsv_ext2 += 2;
-						dw_ext2 -= 2;
-					}
-
-				}
-				else
-				{ //Both closest points on the smaller side
-				  //One of the two extra points is (0,0,0,0)
-					xsv_ext2 = xsb;
-					ysv_ext2 = ysb;
-					zsv_ext2 = zsb;
-					wsv_ext2 = wsb;
-					dx_ext2 = dx0;
-					dy_ext2 = dy0;
-					dz_ext2 = dz0;
-					dw_ext2 = dw0;
-
-					//Other two points are based on the omitted axes.
-					byte c = (byte)(aPoint | bPoint);
-
-					if ((c & 0x01) == 0)
-					{
-						xsv_ext0 = xsb - 1;
-						xsv_ext1 = xsb;
-						dx_ext0 = dx0 + 1 - SQUISH_CONSTANT_4D;
-						dx_ext1 = dx0 - SQUISH_CONSTANT_4D;
-					}
-					else
-					{
-						xsv_ext0 = xsv_ext1 = xsb + 1;
-						dx_ext0 = dx_ext1 = dx0 - 1 - SQUISH_CONSTANT_4D;
-					}
-
-					if ((c & 0x02) == 0)
-					{
-						ysv_ext0 = ysv_ext1 = ysb;
-						dy_ext0 = dy_ext1 = dy0 - SQUISH_CONSTANT_4D;
-						if ((c & 0x01) == 0x01)
-						{
-							ysv_ext0 -= 1;
-							dy_ext0 += 1;
-						}
-						else
-						{
-							ysv_ext1 -= 1;
-							dy_ext1 += 1;
-						}
-					}
-					else
-					{
-						ysv_ext0 = ysv_ext1 = ysb + 1;
-						dy_ext0 = dy_ext1 = dy0 - 1 - SQUISH_CONSTANT_4D;
-					}
-
-					if ((c & 0x04) == 0)
-					{
-						zsv_ext0 = zsv_ext1 = zsb;
-						dz_ext0 = dz_ext1 = dz0 - SQUISH_CONSTANT_4D;
-						if ((c & 0x03) == 0x03)
-						{
-							zsv_ext0 -= 1;
-							dz_ext0 += 1;
-						}
-						else
-						{
-							zsv_ext1 -= 1;
-							dz_ext1 += 1;
-						}
-					}
-					else
-					{
-						zsv_ext0 = zsv_ext1 = zsb + 1;
-						dz_ext0 = dz_ext1 = dz0 - 1 - SQUISH_CONSTANT_4D;
-					}
-
-					if ((c & 0x08) == 0)
-					{
-						wsv_ext0 = wsb;
-						wsv_ext1 = wsb - 1;
-						dw_ext0 = dw0 - SQUISH_CONSTANT_4D;
-						dw_ext1 = dw0 + 1 - SQUISH_CONSTANT_4D;
-					}
-					else
-					{
-						wsv_ext0 = wsv_ext1 = wsb + 1;
-						dw_ext0 = dw_ext1 = dw0 - 1 - SQUISH_CONSTANT_4D;
-					}
-
-				}
-			}
-			else
-			{ //One point on each "side"
-				byte c1, c2;
-				if (aIsBiggerSide)
-				{
-					c1 = aPoint;
-					c2 = bPoint;
-				}
-				else
-				{
-					c1 = bPoint;
-					c2 = aPoint;
-				}
-
-				//Two contributions are the bigger-sided point with each 0 replaced with -1.
-				if ((c1 & 0x01) == 0)
-				{
-					xsv_ext0 = xsb - 1;
-					xsv_ext1 = xsb;
-					dx_ext0 = dx0 + 1 - SQUISH_CONSTANT_4D;
-					dx_ext1 = dx0 - SQUISH_CONSTANT_4D;
-				}
-				else
-				{
-					xsv_ext0 = xsv_ext1 = xsb + 1;
-					dx_ext0 = dx_ext1 = dx0 - 1 - SQUISH_CONSTANT_4D;
-				}
-
-				if ((c1 & 0x02) == 0)
-				{
-					ysv_ext0 = ysv_ext1 = ysb;
-					dy_ext0 = dy_ext1 = dy0 - SQUISH_CONSTANT_4D;
-					if ((c1 & 0x01) == 0x01)
-					{
-						ysv_ext0 -= 1;
-						dy_ext0 += 1;
-					}
-					else
-					{
-						ysv_ext1 -= 1;
-						dy_ext1 += 1;
-					}
-				}
-				else
-				{
-					ysv_ext0 = ysv_ext1 = ysb + 1;
-					dy_ext0 = dy_ext1 = dy0 - 1 - SQUISH_CONSTANT_4D;
-				}
-
-				if ((c1 & 0x04) == 0)
-				{
-					zsv_ext0 = zsv_ext1 = zsb;
-					dz_ext0 = dz_ext1 = dz0 - SQUISH_CONSTANT_4D;
-					if ((c1 & 0x03) == 0x03)
-					{
-						zsv_ext0 -= 1;
-						dz_ext0 += 1;
-					}
-					else
-					{
-						zsv_ext1 -= 1;
-						dz_ext1 += 1;
-					}
-				}
-				else
-				{
-					zsv_ext0 = zsv_ext1 = zsb + 1;
-					dz_ext0 = dz_ext1 = dz0 - 1 - SQUISH_CONSTANT_4D;
-				}
-
-				if ((c1 & 0x08) == 0)
-				{
-					wsv_ext0 = wsb;
-					wsv_ext1 = wsb - 1;
-					dw_ext0 = dw0 - SQUISH_CONSTANT_4D;
-					dw_ext1 = dw0 + 1 - SQUISH_CONSTANT_4D;
-				}
-				else
-				{
-					wsv_ext0 = wsv_ext1 = wsb + 1;
-					dw_ext0 = dw_ext1 = dw0 - 1 - SQUISH_CONSTANT_4D;
-				}
-
-				//One contribution is a permutation of (0,0,0,2) based on the smaller-sided point
-				xsv_ext2 = xsb;
-				ysv_ext2 = ysb;
-				zsv_ext2 = zsb;
-				wsv_ext2 = wsb;
-				dx_ext2 = dx0 - 2 * SQUISH_CONSTANT_4D;
-				dy_ext2 = dy0 - 2 * SQUISH_CONSTANT_4D;
-				dz_ext2 = dz0 - 2 * SQUISH_CONSTANT_4D;
-				dw_ext2 = dw0 - 2 * SQUISH_CONSTANT_4D;
-				if ((c2 & 0x01) != 0)
-				{
-					xsv_ext2 += 2;
-					dx_ext2 -= 2;
-				}
-				else if ((c2 & 0x02) != 0)
-				{
-					ysv_ext2 += 2;
-					dy_ext2 -= 2;
-				}
-				else if ((c2 & 0x04) != 0)
-				{
-					zsv_ext2 += 2;
-					dz_ext2 -= 2;
-				}
-				else
-				{
-					wsv_ext2 += 2;
-					dw_ext2 -= 2;
-				}
-			}
-
-			//Contribution (1,0,0,0)
-			double dx1 = dx0 - 1 - SQUISH_CONSTANT_4D;
-			double dy1 = dy0 - 0 - SQUISH_CONSTANT_4D;
-			double dz1 = dz0 - 0 - SQUISH_CONSTANT_4D;
-			double dw1 = dw0 - 0 - SQUISH_CONSTANT_4D;
-			double attn1 = 2 - dx1 * dx1 - dy1 * dy1 - dz1 * dz1 - dw1 * dw1;
-			if (attn1 > 0)
-			{
-				attn1 *= attn1;
-				value += attn1 * attn1 * extrapolate(xsb + 1, ysb + 0, zsb + 0, wsb + 0, dx1, dy1, dz1, dw1);
-			}
-
-			//Contribution (0,1,0,0)
-			double dx2 = dx0 - 0 - SQUISH_CONSTANT_4D;
-			double dy2 = dy0 - 1 - SQUISH_CONSTANT_4D;
-			double dz2 = dz1;
-			double dw2 = dw1;
-			double attn2 = 2 - dx2 * dx2 - dy2 * dy2 - dz2 * dz2 - dw2 * dw2;
-			if (attn2 > 0)
-			{
-				attn2 *= attn2;
-				value += attn2 * attn2 * extrapolate(xsb + 0, ysb + 1, zsb + 0, wsb + 0, dx2, dy2, dz2, dw2);
-			}
-
-			//Contribution (0,0,1,0)
-			double dx3 = dx2;
-			double dy3 = dy1;
-			double dz3 = dz0 - 1 - SQUISH_CONSTANT_4D;
-			double dw3 = dw1;
-			double attn3 = 2 - dx3 * dx3 - dy3 * dy3 - dz3 * dz3 - dw3 * dw3;
-			if (attn3 > 0)
-			{
-				attn3 *= attn3;
-				value += attn3 * attn3 * extrapolate(xsb + 0, ysb + 0, zsb + 1, wsb + 0, dx3, dy3, dz3, dw3);
-			}
-
-			//Contribution (0,0,0,1)
-			double dx4 = dx2;
-			double dy4 = dy1;
-			double dz4 = dz1;
-			double dw4 = dw0 - 1 - SQUISH_CONSTANT_4D;
-			double attn4 = 2 - dx4 * dx4 - dy4 * dy4 - dz4 * dz4 - dw4 * dw4;
-			if (attn4 > 0)
-			{
-				attn4 *= attn4;
-				value += attn4 * attn4 * extrapolate(xsb + 0, ysb + 0, zsb + 0, wsb + 1, dx4, dy4, dz4, dw4);
-			}
-
-			//Contribution (1,1,0,0)
-			double dx5 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dy5 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dz5 = dz0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dw5 = dw0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double attn5 = 2 - dx5 * dx5 - dy5 * dy5 - dz5 * dz5 - dw5 * dw5;
-			if (attn5 > 0)
-			{
-				attn5 *= attn5;
-				value += attn5 * attn5 * extrapolate(xsb + 1, ysb + 1, zsb + 0, wsb + 0, dx5, dy5, dz5, dw5);
-			}
-
-			//Contribution (1,0,1,0)
-			double dx6 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dy6 = dy0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dz6 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dw6 = dw0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double attn6 = 2 - dx6 * dx6 - dy6 * dy6 - dz6 * dz6 - dw6 * dw6;
-			if (attn6 > 0)
-			{
-				attn6 *= attn6;
-				value += attn6 * attn6 * extrapolate(xsb + 1, ysb + 0, zsb + 1, wsb + 0, dx6, dy6, dz6, dw6);
-			}
-
-			//Contribution (1,0,0,1)
-			double dx7 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dy7 = dy0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dz7 = dz0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dw7 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double attn7 = 2 - dx7 * dx7 - dy7 * dy7 - dz7 * dz7 - dw7 * dw7;
-			if (attn7 > 0)
-			{
-				attn7 *= attn7;
-				value += attn7 * attn7 * extrapolate(xsb + 1, ysb + 0, zsb + 0, wsb + 1, dx7, dy7, dz7, dw7);
-			}
-
-			//Contribution (0,1,1,0)
-			double dx8 = dx0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dy8 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dz8 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dw8 = dw0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double attn8 = 2 - dx8 * dx8 - dy8 * dy8 - dz8 * dz8 - dw8 * dw8;
-			if (attn8 > 0)
-			{
-				attn8 *= attn8;
-				value += attn8 * attn8 * extrapolate(xsb + 0, ysb + 1, zsb + 1, wsb + 0, dx8, dy8, dz8, dw8);
-			}
-
-			//Contribution (0,1,0,1)
-			double dx9 = dx0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dy9 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dz9 = dz0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dw9 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double attn9 = 2 - dx9 * dx9 - dy9 * dy9 - dz9 * dz9 - dw9 * dw9;
-			if (attn9 > 0)
-			{
-				attn9 *= attn9;
-				value += attn9 * attn9 * extrapolate(xsb + 0, ysb + 1, zsb + 0, wsb + 1, dx9, dy9, dz9, dw9);
-			}
-
-			//Contribution (0,0,1,1)
-			double dx10 = dx0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dy10 = dy0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dz10 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dw10 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double attn10 = 2 - dx10 * dx10 - dy10 * dy10 - dz10 * dz10 - dw10 * dw10;
-			if (attn10 > 0)
-			{
-				attn10 *= attn10;
-				value += attn10 * attn10 * extrapolate(xsb + 0, ysb + 0, zsb + 1, wsb + 1, dx10, dy10, dz10, dw10);
-			}
-		}
-		else
-		{ //We're inside the second dispentachoron (Rectified 4-Simplex)
-			double aScore;
-			byte aPoint;
-			bool aIsBiggerSide = true;
-			double bScore;
-			byte bPoint;
-			bool bIsBiggerSide = true;
-
-			//Decide between (0,0,1,1) and (1,1,0,0)
-			if (xins + yins < zins + wins)
-			{
-				aScore = xins + yins;
-				aPoint = 0x0C;
-			}
-			else
-			{
-				aScore = zins + wins;
-				aPoint = 0x03;
-			}
-
-			//Decide between (0,1,0,1) and (1,0,1,0)
-			if (xins + zins < yins + wins)
-			{
-				bScore = xins + zins;
-				bPoint = 0x0A;
-			}
-			else
-			{
-				bScore = yins + wins;
-				bPoint = 0x05;
-			}
-
-			//Closer between (0,1,1,0) and (1,0,0,1) will replace the further of a and b, if closer.
-			if (xins + wins < yins + zins)
-			{
-				double score = xins + wins;
-				if (aScore <= bScore && score < bScore)
-				{
-					bScore = score;
-					bPoint = 0x06;
-				}
-				else if (aScore > bScore && score < aScore)
-				{
-					aScore = score;
-					aPoint = 0x06;
-				}
-			}
-			else
-			{
-				double score = yins + zins;
-				if (aScore <= bScore && score < bScore)
-				{
-					bScore = score;
-					bPoint = 0x09;
-				}
-				else if (aScore > bScore && score < aScore)
-				{
-					aScore = score;
-					aPoint = 0x09;
-				}
-			}
-
-			//Decide if (0,1,1,1) is closer.
-			double p1 = 3 - inSum + xins;
-			if (aScore <= bScore && p1 < bScore)
-			{
-				bScore = p1;
-				bPoint = 0x0E;
-				bIsBiggerSide = false;
-			}
-			else if (aScore > bScore && p1 < aScore)
-			{
-				aScore = p1;
-				aPoint = 0x0E;
-				aIsBiggerSide = false;
-			}
-
-			//Decide if (1,0,1,1) is closer.
-			double p2 = 3 - inSum + yins;
-			if (aScore <= bScore && p2 < bScore)
-			{
-				bScore = p2;
-				bPoint = 0x0D;
-				bIsBiggerSide = false;
-			}
-			else if (aScore > bScore && p2 < aScore)
-			{
-				aScore = p2;
-				aPoint = 0x0D;
-				aIsBiggerSide = false;
-			}
-
-			//Decide if (1,1,0,1) is closer.
-			double p3 = 3 - inSum + zins;
-			if (aScore <= bScore && p3 < bScore)
-			{
-				bScore = p3;
-				bPoint = 0x0B;
-				bIsBiggerSide = false;
-			}
-			else if (aScore > bScore && p3 < aScore)
-			{
-				aScore = p3;
-				aPoint = 0x0B;
-				aIsBiggerSide = false;
-			}
-
-			//Decide if (1,1,1,0) is closer.
-			double p4 = 3 - inSum + wins;
-			if (aScore <= bScore && p4 < bScore)
-			{
-				bScore = p4;
-				bPoint = 0x07;
-				bIsBiggerSide = false;
-			}
-			else if (aScore > bScore && p4 < aScore)
-			{
-				aScore = p4;
-				aPoint = 0x07;
-				aIsBiggerSide = false;
-			}
-
-			//Where each of the two closest points are determines how the extra three vertices are calculated.
-			if (aIsBiggerSide == bIsBiggerSide)
-			{
-				if (aIsBiggerSide)
-				{ //Both closest points on the bigger side
-					byte c1 = (byte)(aPoint & bPoint);
-					byte c2 = (byte)(aPoint | bPoint);
-
-					//Two contributions are permutations of (0,0,0,1) and (0,0,0,2) based on c1
-					xsv_ext0 = xsv_ext1 = xsb;
-					ysv_ext0 = ysv_ext1 = ysb;
-					zsv_ext0 = zsv_ext1 = zsb;
-					wsv_ext0 = wsv_ext1 = wsb;
-					dx_ext0 = dx0 - SQUISH_CONSTANT_4D;
-					dy_ext0 = dy0 - SQUISH_CONSTANT_4D;
-					dz_ext0 = dz0 - SQUISH_CONSTANT_4D;
-					dw_ext0 = dw0 - SQUISH_CONSTANT_4D;
-					dx_ext1 = dx0 - 2 * SQUISH_CONSTANT_4D;
-					dy_ext1 = dy0 - 2 * SQUISH_CONSTANT_4D;
-					dz_ext1 = dz0 - 2 * SQUISH_CONSTANT_4D;
-					dw_ext1 = dw0 - 2 * SQUISH_CONSTANT_4D;
-					if ((c1 & 0x01) != 0)
-					{
-						xsv_ext0 += 1;
-						dx_ext0 -= 1;
-						xsv_ext1 += 2;
-						dx_ext1 -= 2;
-					}
-					else if ((c1 & 0x02) != 0)
-					{
-						ysv_ext0 += 1;
-						dy_ext0 -= 1;
-						ysv_ext1 += 2;
-						dy_ext1 -= 2;
-					}
-					else if ((c1 & 0x04) != 0)
-					{
-						zsv_ext0 += 1;
-						dz_ext0 -= 1;
-						zsv_ext1 += 2;
-						dz_ext1 -= 2;
-					}
-					else
-					{
-						wsv_ext0 += 1;
-						dw_ext0 -= 1;
-						wsv_ext1 += 2;
-						dw_ext1 -= 2;
-					}
-
-					//One contribution is a permutation of (1,1,1,-1) based on c2
-					xsv_ext2 = xsb + 1;
-					ysv_ext2 = ysb + 1;
-					zsv_ext2 = zsb + 1;
-					wsv_ext2 = wsb + 1;
-					dx_ext2 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dy_ext2 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dz_ext2 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					dw_ext2 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-					if ((c2 & 0x01) == 0)
-					{
-						xsv_ext2 -= 2;
-						dx_ext2 += 2;
-					}
-					else if ((c2 & 0x02) == 0)
-					{
-						ysv_ext2 -= 2;
-						dy_ext2 += 2;
-					}
-					else if ((c2 & 0x04) == 0)
-					{
-						zsv_ext2 -= 2;
-						dz_ext2 += 2;
-					}
-					else
-					{
-						wsv_ext2 -= 2;
-						dw_ext2 += 2;
-					}
-				}
-				else
-				{ //Both closest points on the smaller side
-				  //One of the two extra points is (1,1,1,1)
-					xsv_ext2 = xsb + 1;
-					ysv_ext2 = ysb + 1;
-					zsv_ext2 = zsb + 1;
-					wsv_ext2 = wsb + 1;
-					dx_ext2 = dx0 - 1 - 4 * SQUISH_CONSTANT_4D;
-					dy_ext2 = dy0 - 1 - 4 * SQUISH_CONSTANT_4D;
-					dz_ext2 = dz0 - 1 - 4 * SQUISH_CONSTANT_4D;
-					dw_ext2 = dw0 - 1 - 4 * SQUISH_CONSTANT_4D;
-
-					//Other two points are based on the shared axes.
-					byte c = (byte)(aPoint & bPoint);
-
-					if ((c & 0x01) != 0)
-					{
-						xsv_ext0 = xsb + 2;
-						xsv_ext1 = xsb + 1;
-						dx_ext0 = dx0 - 2 - 3 * SQUISH_CONSTANT_4D;
-						dx_ext1 = dx0 - 1 - 3 * SQUISH_CONSTANT_4D;
-					}
-					else
-					{
-						xsv_ext0 = xsv_ext1 = xsb;
-						dx_ext0 = dx_ext1 = dx0 - 3 * SQUISH_CONSTANT_4D;
-					}
-
-					if ((c & 0x02) != 0)
-					{
-						ysv_ext0 = ysv_ext1 = ysb + 1;
-						dy_ext0 = dy_ext1 = dy0 - 1 - 3 * SQUISH_CONSTANT_4D;
-						if ((c & 0x01) == 0)
-						{
-							ysv_ext0 += 1;
-							dy_ext0 -= 1;
-						}
-						else
-						{
-							ysv_ext1 += 1;
-							dy_ext1 -= 1;
-						}
-					}
-					else
-					{
-						ysv_ext0 = ysv_ext1 = ysb;
-						dy_ext0 = dy_ext1 = dy0 - 3 * SQUISH_CONSTANT_4D;
-					}
-
-					if ((c & 0x04) != 0)
-					{
-						zsv_ext0 = zsv_ext1 = zsb + 1;
-						dz_ext0 = dz_ext1 = dz0 - 1 - 3 * SQUISH_CONSTANT_4D;
-						if ((c & 0x03) == 0)
-						{
-							zsv_ext0 += 1;
-							dz_ext0 -= 1;
-						}
-						else
-						{
-							zsv_ext1 += 1;
-							dz_ext1 -= 1;
-						}
-					}
-					else
-					{
-						zsv_ext0 = zsv_ext1 = zsb;
-						dz_ext0 = dz_ext1 = dz0 - 3 * SQUISH_CONSTANT_4D;
-					}
-
-					if ((c & 0x08) != 0)
-					{
-						wsv_ext0 = wsb + 1;
-						wsv_ext1 = wsb + 2;
-						dw_ext0 = dw0 - 1 - 3 * SQUISH_CONSTANT_4D;
-						dw_ext1 = dw0 - 2 - 3 * SQUISH_CONSTANT_4D;
-					}
-					else
-					{
-						wsv_ext0 = wsv_ext1 = wsb;
-						dw_ext0 = dw_ext1 = dw0 - 3 * SQUISH_CONSTANT_4D;
-					}
-				}
-			}
-			else
-			{ //One point on each "side"
-				byte c1, c2;
-				if (aIsBiggerSide)
-				{
-					c1 = aPoint;
-					c2 = bPoint;
-				}
-				else
-				{
-					c1 = bPoint;
-					c2 = aPoint;
-				}
-
-				//Two contributions are the bigger-sided point with each 1 replaced with 2.
-				if ((c1 & 0x01) != 0)
-				{
-					xsv_ext0 = xsb + 2;
-					xsv_ext1 = xsb + 1;
-					dx_ext0 = dx0 - 2 - 3 * SQUISH_CONSTANT_4D;
-					dx_ext1 = dx0 - 1 - 3 * SQUISH_CONSTANT_4D;
-				}
-				else
-				{
-					xsv_ext0 = xsv_ext1 = xsb;
-					dx_ext0 = dx_ext1 = dx0 - 3 * SQUISH_CONSTANT_4D;
-				}
-
-				if ((c1 & 0x02) != 0)
-				{
-					ysv_ext0 = ysv_ext1 = ysb + 1;
-					dy_ext0 = dy_ext1 = dy0 - 1 - 3 * SQUISH_CONSTANT_4D;
-					if ((c1 & 0x01) == 0)
-					{
-						ysv_ext0 += 1;
-						dy_ext0 -= 1;
-					}
-					else
-					{
-						ysv_ext1 += 1;
-						dy_ext1 -= 1;
-					}
-				}
-				else
-				{
-					ysv_ext0 = ysv_ext1 = ysb;
-					dy_ext0 = dy_ext1 = dy0 - 3 * SQUISH_CONSTANT_4D;
-				}
-
-				if ((c1 & 0x04) != 0)
-				{
-					zsv_ext0 = zsv_ext1 = zsb + 1;
-					dz_ext0 = dz_ext1 = dz0 - 1 - 3 * SQUISH_CONSTANT_4D;
-					if ((c1 & 0x03) == 0)
-					{
-						zsv_ext0 += 1;
-						dz_ext0 -= 1;
-					}
-					else
-					{
-						zsv_ext1 += 1;
-						dz_ext1 -= 1;
-					}
-				}
-				else
-				{
-					zsv_ext0 = zsv_ext1 = zsb;
-					dz_ext0 = dz_ext1 = dz0 - 3 * SQUISH_CONSTANT_4D;
-				}
-
-				if ((c1 & 0x08) != 0)
-				{
-					wsv_ext0 = wsb + 1;
-					wsv_ext1 = wsb + 2;
-					dw_ext0 = dw0 - 1 - 3 * SQUISH_CONSTANT_4D;
-					dw_ext1 = dw0 - 2 - 3 * SQUISH_CONSTANT_4D;
-				}
-				else
-				{
-					wsv_ext0 = wsv_ext1 = wsb;
-					dw_ext0 = dw_ext1 = dw0 - 3 * SQUISH_CONSTANT_4D;
-				}
-
-				//One contribution is a permutation of (1,1,1,-1) based on the smaller-sided point
-				xsv_ext2 = xsb + 1;
-				ysv_ext2 = ysb + 1;
-				zsv_ext2 = zsb + 1;
-				wsv_ext2 = wsb + 1;
-				dx_ext2 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-				dy_ext2 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-				dz_ext2 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-				dw_ext2 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-				if ((c2 & 0x01) == 0)
-				{
-					xsv_ext2 -= 2;
-					dx_ext2 += 2;
-				}
-				else if ((c2 & 0x02) == 0)
-				{
-					ysv_ext2 -= 2;
-					dy_ext2 += 2;
-				}
-				else if ((c2 & 0x04) == 0)
-				{
-					zsv_ext2 -= 2;
-					dz_ext2 += 2;
-				}
-				else
-				{
-					wsv_ext2 -= 2;
-					dw_ext2 += 2;
-				}
-			}
-
-			//Contribution (1,1,1,0)
-			double dx4 = dx0 - 1 - 3 * SQUISH_CONSTANT_4D;
-			double dy4 = dy0 - 1 - 3 * SQUISH_CONSTANT_4D;
-			double dz4 = dz0 - 1 - 3 * SQUISH_CONSTANT_4D;
-			double dw4 = dw0 - 3 * SQUISH_CONSTANT_4D;
-			double attn4 = 2 - dx4 * dx4 - dy4 * dy4 - dz4 * dz4 - dw4 * dw4;
-			if (attn4 > 0)
-			{
-				attn4 *= attn4;
-				value += attn4 * attn4 * extrapolate(xsb + 1, ysb + 1, zsb + 1, wsb + 0, dx4, dy4, dz4, dw4);
-			}
-
-			//Contribution (1,1,0,1)
-			double dx3 = dx4;
-			double dy3 = dy4;
-			double dz3 = dz0 - 3 * SQUISH_CONSTANT_4D;
-			double dw3 = dw0 - 1 - 3 * SQUISH_CONSTANT_4D;
-			double attn3 = 2 - dx3 * dx3 - dy3 * dy3 - dz3 * dz3 - dw3 * dw3;
-			if (attn3 > 0)
-			{
-				attn3 *= attn3;
-				value += attn3 * attn3 * extrapolate(xsb + 1, ysb + 1, zsb + 0, wsb + 1, dx3, dy3, dz3, dw3);
-			}
-
-			//Contribution (1,0,1,1)
-			double dx2 = dx4;
-			double dy2 = dy0 - 3 * SQUISH_CONSTANT_4D;
-			double dz2 = dz4;
-			double dw2 = dw3;
-			double attn2 = 2 - dx2 * dx2 - dy2 * dy2 - dz2 * dz2 - dw2 * dw2;
-			if (attn2 > 0)
-			{
-				attn2 *= attn2;
-				value += attn2 * attn2 * extrapolate(xsb + 1, ysb + 0, zsb + 1, wsb + 1, dx2, dy2, dz2, dw2);
-			}
-
-			//Contribution (0,1,1,1)
-			double dx1 = dx0 - 3 * SQUISH_CONSTANT_4D;
-			double dz1 = dz4;
-			double dy1 = dy4;
-			double dw1 = dw3;
-			double attn1 = 2 - dx1 * dx1 - dy1 * dy1 - dz1 * dz1 - dw1 * dw1;
-			if (attn1 > 0)
-			{
-				attn1 *= attn1;
-				value += attn1 * attn1 * extrapolate(xsb + 0, ysb + 1, zsb + 1, wsb + 1, dx1, dy1, dz1, dw1);
-			}
-
-			//Contribution (1,1,0,0)
-			double dx5 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dy5 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dz5 = dz0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dw5 = dw0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double attn5 = 2 - dx5 * dx5 - dy5 * dy5 - dz5 * dz5 - dw5 * dw5;
-			if (attn5 > 0)
-			{
-				attn5 *= attn5;
-				value += attn5 * attn5 * extrapolate(xsb + 1, ysb + 1, zsb + 0, wsb + 0, dx5, dy5, dz5, dw5);
-			}
-
-			//Contribution (1,0,1,0)
-			double dx6 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dy6 = dy0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dz6 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dw6 = dw0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double attn6 = 2 - dx6 * dx6 - dy6 * dy6 - dz6 * dz6 - dw6 * dw6;
-			if (attn6 > 0)
-			{
-				attn6 *= attn6;
-				value += attn6 * attn6 * extrapolate(xsb + 1, ysb + 0, zsb + 1, wsb + 0, dx6, dy6, dz6, dw6);
-			}
-
-			//Contribution (1,0,0,1)
-			double dx7 = dx0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dy7 = dy0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dz7 = dz0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dw7 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double attn7 = 2 - dx7 * dx7 - dy7 * dy7 - dz7 * dz7 - dw7 * dw7;
-			if (attn7 > 0)
-			{
-				attn7 *= attn7;
-				value += attn7 * attn7 * extrapolate(xsb + 1, ysb + 0, zsb + 0, wsb + 1, dx7, dy7, dz7, dw7);
-			}
-
-			//Contribution (0,1,1,0)
-			double dx8 = dx0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dy8 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dz8 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dw8 = dw0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double attn8 = 2 - dx8 * dx8 - dy8 * dy8 - dz8 * dz8 - dw8 * dw8;
-			if (attn8 > 0)
-			{
-				attn8 *= attn8;
-				value += attn8 * attn8 * extrapolate(xsb + 0, ysb + 1, zsb + 1, wsb + 0, dx8, dy8, dz8, dw8);
-			}
-
-			//Contribution (0,1,0,1)
-			double dx9 = dx0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dy9 = dy0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dz9 = dz0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dw9 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double attn9 = 2 - dx9 * dx9 - dy9 * dy9 - dz9 * dz9 - dw9 * dw9;
-			if (attn9 > 0)
-			{
-				attn9 *= attn9;
-				value += attn9 * attn9 * extrapolate(xsb + 0, ysb + 1, zsb + 0, wsb + 1, dx9, dy9, dz9, dw9);
-			}
-
-			//Contribution (0,0,1,1)
-			double dx10 = dx0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dy10 = dy0 - 0 - 2 * SQUISH_CONSTANT_4D;
-			double dz10 = dz0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double dw10 = dw0 - 1 - 2 * SQUISH_CONSTANT_4D;
-			double attn10 = 2 - dx10 * dx10 - dy10 * dy10 - dz10 * dz10 - dw10 * dw10;
-			if (attn10 > 0)
-			{
-				attn10 *= attn10;
-				value += attn10 * attn10 * extrapolate(xsb + 0, ysb + 0, zsb + 1, wsb + 1, dx10, dy10, dz10, dw10);
-			}
-		}
-
-		//First extra vertex
-		double attn_ext0 = 2 - dx_ext0 * dx_ext0 - dy_ext0 * dy_ext0 - dz_ext0 * dz_ext0 - dw_ext0 * dw_ext0;
-		if (attn_ext0 > 0)
-		{
-			attn_ext0 *= attn_ext0;
-			value += attn_ext0 * attn_ext0 * extrapolate(xsv_ext0, ysv_ext0, zsv_ext0, wsv_ext0, dx_ext0, dy_ext0, dz_ext0, dw_ext0);
-		}
-
-		//Second extra vertex
-		double attn_ext1 = 2 - dx_ext1 * dx_ext1 - dy_ext1 * dy_ext1 - dz_ext1 * dz_ext1 - dw_ext1 * dw_ext1;
-		if (attn_ext1 > 0)
-		{
-			attn_ext1 *= attn_ext1;
-			value += attn_ext1 * attn_ext1 * extrapolate(xsv_ext1, ysv_ext1, zsv_ext1, wsv_ext1, dx_ext1, dy_ext1, dz_ext1, dw_ext1);
-		}
-
-		//Third extra vertex
-		double attn_ext2 = 2 - dx_ext2 * dx_ext2 - dy_ext2 * dy_ext2 - dz_ext2 * dz_ext2 - dw_ext2 * dw_ext2;
-		if (attn_ext2 > 0)
-		{
-			attn_ext2 *= attn_ext2;
-			value += attn_ext2 * attn_ext2 * extrapolate(xsv_ext2, ysv_ext2, zsv_ext2, wsv_ext2, dx_ext2, dy_ext2, dz_ext2, dw_ext2);
-		}
-
-		return value / NORM_CONSTANT_4D;
-	}
-
-	private double extrapolate(int xsb, int ysb, double dx, double dy)
-	{
-		int index = perm[(perm[xsb & 0xFF] + ysb) & 0xFF] & 0x0E;
-		return gradients2D[index] * dx
-			+ gradients2D[index + 1] * dy;
-	}
-
-	private double extrapolate(int xsb, int ysb, int zsb, double dx, double dy, double dz)
-	{
-		int index = permGradIndex3D[(perm[(perm[xsb & 0xFF] + ysb) & 0xFF] + zsb) & 0xFF];
-		return gradients3D[index] * dx
-			+ gradients3D[index + 1] * dy
-			+ gradients3D[index + 2] * dz;
-	}
-
-	private double extrapolate(int xsb, int ysb, int zsb, int wsb, double dx, double dy, double dz, double dw)
-	{
-		int index = perm[(perm[(perm[(perm[xsb & 0xFF] + ysb) & 0xFF] + zsb) & 0xFF] + wsb) & 0xFF] & 0xFC;
-		return gradients4D[index] * dx
-			+ gradients4D[index + 1] * dy
-			+ gradients4D[index + 2] * dz
-			+ gradients4D[index + 3] * dw;
-	}
-
-	private static int fastFloor(double x)
-	{
-		int xi = (int)x;
-		return x < xi ? xi - 1 : xi;
-	}
-
-	//Gradients for 2D. They approximate the directions to the
-	//vertices of an octagon from the center.
-	private static int[] gradients2D = new int[] {
-			 5,  2,    2,  5,
-			-5,  2,   -2,  5,
-			 5, -2,    2, -5,
-			-5, -2,   -2, -5,
-		};
-
-	//Gradients for 3D. They approximate the directions to the
-	//vertices of a rhombicuboctahedron from the center, skewed so
-	//that the triangular and square facets can be inscribed inside
-	//circles of the same radius.
-	private static int[] gradients3D = new int[] {
-			-11,  4,  4,     -4,  11,  4,    -4,  4,  11,
-			 11,  4,  4,      4,  11,  4,     4,  4,  11,
-			-11, -4,  4,     -4, -11,  4,    -4, -4,  11,
-			 11, -4,  4,      4, -11,  4,     4, -4,  11,
-			-11,  4, -4,     -4,  11, -4,    -4,  4, -11,
-			 11,  4, -4,      4,  11, -4,     4,  4, -11,
-			-11, -4, -4,     -4, -11, -4,    -4, -4, -11,
-			 11, -4, -4,      4, -11, -4,     4, -4, -11,
-		};
-
-	//Gradients for 4D. They approximate the directions to the
-	//vertices of a disprismatotesseractihexadecachoron from the center,
-	//skewed so that the tetrahedral and cubic facets can be inscribed inside
-	//spheres of the same radius.
-	private static int[] gradients4D = new int[] {
-			 3,  1,  1,  1,      1,  3,  1,  1,      1,  1,  3,  1,      1,  1,  1,  3,
-			-3,  1,  1,  1,     -1,  3,  1,  1,     -1,  1,  3,  1,     -1,  1,  1,  3,
-			 3, -1,  1,  1,      1, -3,  1,  1,      1, -1,  3,  1,      1, -1,  1,  3,
-			-3, -1,  1,  1,     -1, -3,  1,  1,     -1, -1,  3,  1,     -1, -1,  1,  3,
-			 3,  1, -1,  1,      1,  3, -1,  1,      1,  1, -3,  1,      1,  1, -1,  3,
-			-3,  1, -1,  1,     -1,  3, -1,  1,     -1,  1, -3,  1,     -1,  1, -1,  3,
-			 3, -1, -1,  1,      1, -3, -1,  1,      1, -1, -3,  1,      1, -1, -1,  3,
-			-3, -1, -1,  1,     -1, -3, -1,  1,     -1, -1, -3,  1,     -1, -1, -1,  3,
-			 3,  1,  1, -1,      1,  3,  1, -1,      1,  1,  3, -1,      1,  1,  1, -3,
-			-3,  1,  1, -1,     -1,  3,  1, -1,     -1,  1,  3, -1,     -1,  1,  1, -3,
-			 3, -1,  1, -1,      1, -3,  1, -1,      1, -1,  3, -1,      1, -1,  1, -3,
-			-3, -1,  1, -1,     -1, -3,  1, -1,     -1, -1,  3, -1,     -1, -1,  1, -3,
-			 3,  1, -1, -1,      1,  3, -1, -1,      1,  1, -3, -1,      1,  1, -1, -3,
-			-3,  1, -1, -1,     -1,  3, -1, -1,     -1,  1, -3, -1,     -1,  1, -1, -3,
-			 3, -1, -1, -1,      1, -3, -1, -1,      1, -1, -3, -1,      1, -1, -1, -3,
-			-3, -1, -1, -1,     -1, -3, -1, -1,     -1, -1, -3, -1,     -1, -1, -1, -3,
-		};
+    private const double STRETCH_2D = -0.211324865405187;    //(1/Math.sqrt(2+1)-1)/2;
+    private const double STRETCH_3D = -1.0 / 6.0;            //(1/Math.sqrt(3+1)-1)/3;
+    private const double STRETCH_4D = -0.138196601125011;    //(1/Math.sqrt(4+1)-1)/4;
+    private const double SQUISH_2D = 0.366025403784439;      //(Math.sqrt(2+1)-1)/2;
+    private const double SQUISH_3D = 1.0 / 3.0;              //(Math.sqrt(3+1)-1)/3;
+    private const double SQUISH_4D = 0.309016994374947;      //(Math.sqrt(4+1)-1)/4;
+    private const double NORM_2D = 1.0 / 47.0;
+    private const double NORM_3D = 1.0 / 103.0;
+    private const double NORM_4D = 1.0 / 30.0;
+
+    private byte[] perm;
+    private byte[] perm2D;
+    private byte[] perm3D;
+    private byte[] perm4D;
+
+    private static double[] gradients2D = new double[]
+    {
+            5,  2,    2,  5,
+        -5,  2,   -2,  5,
+            5, -2,    2, -5,
+        -5, -2,   -2, -5,
+    };
+
+    private static double[] gradients3D =
+    {
+        -11,  4,  4,     -4,  11,  4,    -4,  4,  11,
+            11,  4,  4,      4,  11,  4,     4,  4,  11,
+        -11, -4,  4,     -4, -11,  4,    -4, -4,  11,
+            11, -4,  4,      4, -11,  4,     4, -4,  11,
+        -11,  4, -4,     -4,  11, -4,    -4,  4, -11,
+            11,  4, -4,      4,  11, -4,     4,  4, -11,
+        -11, -4, -4,     -4, -11, -4,    -4, -4, -11,
+            11, -4, -4,      4, -11, -4,     4, -4, -11,
+    };
+
+    private static double[] gradients4D =
+    {
+            3,  1,  1,  1,      1,  3,  1,  1,      1,  1,  3,  1,      1,  1,  1,  3,
+        -3,  1,  1,  1,     -1,  3,  1,  1,     -1,  1,  3,  1,     -1,  1,  1,  3,
+            3, -1,  1,  1,      1, -3,  1,  1,      1, -1,  3,  1,      1, -1,  1,  3,
+        -3, -1,  1,  1,     -1, -3,  1,  1,     -1, -1,  3,  1,     -1, -1,  1,  3,
+            3,  1, -1,  1,      1,  3, -1,  1,      1,  1, -3,  1,      1,  1, -1,  3,
+        -3,  1, -1,  1,     -1,  3, -1,  1,     -1,  1, -3,  1,     -1,  1, -1,  3,
+            3, -1, -1,  1,      1, -3, -1,  1,      1, -1, -3,  1,      1, -1, -1,  3,
+        -3, -1, -1,  1,     -1, -3, -1,  1,     -1, -1, -3,  1,     -1, -1, -1,  3,
+            3,  1,  1, -1,      1,  3,  1, -1,      1,  1,  3, -1,      1,  1,  1, -3,
+        -3,  1,  1, -1,     -1,  3,  1, -1,     -1,  1,  3, -1,     -1,  1,  1, -3,
+            3, -1,  1, -1,      1, -3,  1, -1,      1, -1,  3, -1,      1, -1,  1, -3,
+        -3, -1,  1, -1,     -1, -3,  1, -1,     -1, -1,  3, -1,     -1, -1,  1, -3,
+            3,  1, -1, -1,      1,  3, -1, -1,      1,  1, -3, -1,      1,  1, -1, -3,
+        -3,  1, -1, -1,     -1,  3, -1, -1,     -1,  1, -3, -1,     -1,  1, -1, -3,
+            3, -1, -1, -1,      1, -3, -1, -1,      1, -1, -3, -1,      1, -1, -1, -3,
+        -3, -1, -1, -1,     -1, -3, -1, -1,     -1, -1, -3, -1,     -1, -1, -1, -3,
+    };
+
+    private static Contribution2[] lookup2D;
+    private static Contribution3[] lookup3D;
+    private static Contribution4[] lookup4D;
+
+    static SimplexNoiseGenerator()
+    {
+        var base2D = new int[][]
+        {
+            new int[] { 1, 1, 0, 1, 0, 1, 0, 0, 0 },
+            new int[] { 1, 1, 0, 1, 0, 1, 2, 1, 1 }
+        };
+        var p2D = new int[] { 0, 0, 1, -1, 0, 0, -1, 1, 0, 2, 1, 1, 1, 2, 2, 0, 1, 2, 0, 2, 1, 0, 0, 0 };
+        var lookupPairs2D = new int[] { 0, 1, 1, 0, 4, 1, 17, 0, 20, 2, 21, 2, 22, 5, 23, 5, 26, 4, 39, 3, 42, 4, 43, 3 };
+
+        var contributions2D = new Contribution2[p2D.Length / 4];
+        for (int i = 0; i < p2D.Length; i += 4)
+        {
+            var baseSet = base2D[p2D[i]];
+            Contribution2 previous = null, current = null;
+            for (int k = 0; k < baseSet.Length; k += 3)
+            {
+                current = new Contribution2(baseSet[k], baseSet[k + 1], baseSet[k + 2]);
+                if (previous == null)
+                {
+                    contributions2D[i / 4] = current;
+                }
+                else
+                {
+                    previous.Next = current;
+                }
+                previous = current;
+            }
+            current.Next = new Contribution2(p2D[i + 1], p2D[i + 2], p2D[i + 3]);
+        }
+
+        lookup2D = new Contribution2[64];
+        for (var i = 0; i < lookupPairs2D.Length; i += 2)
+        {
+            lookup2D[lookupPairs2D[i]] = contributions2D[lookupPairs2D[i + 1]];
+        }
+
+
+        var base3D = new int[][]
+        {
+            new int[] { 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1 },
+            new int[] { 2, 1, 1, 0, 2, 1, 0, 1, 2, 0, 1, 1, 3, 1, 1, 1 },
+            new int[] { 1, 1, 0, 0, 1, 0, 1, 0, 1, 0, 0, 1, 2, 1, 1, 0, 2, 1, 0, 1, 2, 0, 1, 1 }
+        };
+        var p3D = new int[] { 0, 0, 1, -1, 0, 0, 1, 0, -1, 0, 0, -1, 1, 0, 0, 0, 1, -1, 0, 0, -1, 0, 1, 0, 0, -1, 1, 0, 2, 1, 1, 0, 1, 1, 1, -1, 0, 2, 1, 0, 1, 1, 1, -1, 1, 0, 2, 0, 1, 1, 1, -1, 1, 1, 1, 3, 2, 1, 0, 3, 1, 2, 0, 1, 3, 2, 0, 1, 3, 1, 0, 2, 1, 3, 0, 2, 1, 3, 0, 1, 2, 1, 1, 1, 0, 0, 2, 2, 0, 0, 1, 1, 0, 1, 0, 2, 0, 2, 0, 1, 1, 0, 0, 1, 2, 0, 0, 2, 2, 0, 0, 0, 0, 1, 1, -1, 1, 2, 0, 0, 0, 0, 1, -1, 1, 1, 2, 0, 0, 0, 0, 1, 1, 1, -1, 2, 3, 1, 1, 1, 2, 0, 0, 2, 2, 3, 1, 1, 1, 2, 2, 0, 0, 2, 3, 1, 1, 1, 2, 0, 2, 0, 2, 1, 1, -1, 1, 2, 0, 0, 2, 2, 1, 1, -1, 1, 2, 2, 0, 0, 2, 1, -1, 1, 1, 2, 0, 0, 2, 2, 1, -1, 1, 1, 2, 0, 2, 0, 2, 1, 1, 1, -1, 2, 2, 0, 0, 2, 1, 1, 1, -1, 2, 0, 2, 0 };
+        var lookupPairs3D = new int[] { 0, 2, 1, 1, 2, 2, 5, 1, 6, 0, 7, 0, 32, 2, 34, 2, 129, 1, 133, 1, 160, 5, 161, 5, 518, 0, 519, 0, 546, 4, 550, 4, 645, 3, 647, 3, 672, 5, 673, 5, 674, 4, 677, 3, 678, 4, 679, 3, 680, 13, 681, 13, 682, 12, 685, 14, 686, 12, 687, 14, 712, 20, 714, 18, 809, 21, 813, 23, 840, 20, 841, 21, 1198, 19, 1199, 22, 1226, 18, 1230, 19, 1325, 23, 1327, 22, 1352, 15, 1353, 17, 1354, 15, 1357, 17, 1358, 16, 1359, 16, 1360, 11, 1361, 10, 1362, 11, 1365, 10, 1366, 9, 1367, 9, 1392, 11, 1394, 11, 1489, 10, 1493, 10, 1520, 8, 1521, 8, 1878, 9, 1879, 9, 1906, 7, 1910, 7, 2005, 6, 2007, 6, 2032, 8, 2033, 8, 2034, 7, 2037, 6, 2038, 7, 2039, 6 };
+
+        var contributions3D = new Contribution3[p3D.Length / 9];
+        for (int i = 0; i < p3D.Length; i += 9)
+        {
+            var baseSet = base3D[p3D[i]];
+            Contribution3 previous = null, current = null;
+            for (int k = 0; k < baseSet.Length; k += 4)
+            {
+                current = new Contribution3(baseSet[k], baseSet[k + 1], baseSet[k + 2], baseSet[k + 3]);
+                if (previous == null)
+                {
+                    contributions3D[i / 9] = current;
+                }
+                else
+                {
+                    previous.Next = current;
+                }
+                previous = current;
+            }
+            current.Next = new Contribution3(p3D[i + 1], p3D[i + 2], p3D[i + 3], p3D[i + 4]);
+            current.Next.Next = new Contribution3(p3D[i + 5], p3D[i + 6], p3D[i + 7], p3D[i + 8]);
+        }
+
+        lookup3D = new Contribution3[2048];
+        for (var i = 0; i < lookupPairs3D.Length; i += 2)
+        {
+            lookup3D[lookupPairs3D[i]] = contributions3D[lookupPairs3D[i + 1]];
+        }
+
+        var base4D = new int[][]
+        {
+            new int[] { 0, 0, 0, 0, 0, 1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1 },
+            new int[] { 3, 1, 1, 1, 0, 3, 1, 1, 0, 1, 3, 1, 0, 1, 1, 3, 0, 1, 1, 1, 4, 1, 1, 1, 1 },
+            new int[] { 1, 1, 0, 0, 0, 1, 0, 1, 0, 0, 1, 0, 0, 1, 0, 1, 0, 0, 0, 1, 2, 1, 1, 0, 0, 2, 1, 0, 1, 0, 2, 1, 0, 0, 1, 2, 0, 1, 1, 0, 2, 0, 1, 0, 1, 2, 0, 0, 1, 1 },
+            new int[] { 3, 1, 1, 1, 0, 3, 1, 1, 0, 1, 3, 1, 0, 1, 1, 3, 0, 1, 1, 1, 2, 1, 1, 0, 0, 2, 1, 0, 1, 0, 2, 1, 0, 0, 1, 2, 0, 1, 1, 0, 2, 0, 1, 0, 1, 2, 0, 0, 1, 1 }
+        };
+        var p4D = new int[] { 0, 0, 1, -1, 0, 0, 0, 1, 0, -1, 0, 0, 1, 0, 0, -1, 0, 0, -1, 1, 0, 0, 0, 0, 1, -1, 0, 0, 0, 1, 0, -1, 0, 0, -1, 0, 1, 0, 0, 0, -1, 1, 0, 0, 0, 0, 1, -1, 0, 0, -1, 0, 0, 1, 0, 0, -1, 0, 1, 0, 0, 0, -1, 1, 0, 2, 1, 1, 0, 0, 1, 1, 1, -1, 0, 1, 1, 1, 0, -1, 0, 2, 1, 0, 1, 0, 1, 1, -1, 1, 0, 1, 1, 0, 1, -1, 0, 2, 0, 1, 1, 0, 1, -1, 1, 1, 0, 1, 0, 1, 1, -1, 0, 2, 1, 0, 0, 1, 1, 1, -1, 0, 1, 1, 1, 0, -1, 1, 0, 2, 0, 1, 0, 1, 1, -1, 1, 0, 1, 1, 0, 1, -1, 1, 0, 2, 0, 0, 1, 1, 1, -1, 0, 1, 1, 1, 0, -1, 1, 1, 1, 4, 2, 1, 1, 0, 4, 1, 2, 1, 0, 4, 1, 1, 2, 0, 1, 4, 2, 1, 0, 1, 4, 1, 2, 0, 1, 4, 1, 1, 0, 2, 1, 4, 2, 0, 1, 1, 4, 1, 0, 2, 1, 4, 1, 0, 1, 2, 1, 4, 0, 2, 1, 1, 4, 0, 1, 2, 1, 4, 0, 1, 1, 2, 1, 2, 1, 1, 0, 0, 3, 2, 1, 0, 0, 3, 1, 2, 0, 0, 1, 2, 1, 0, 1, 0, 3, 2, 0, 1, 0, 3, 1, 0, 2, 0, 1, 2, 0, 1, 1, 0, 3, 0, 2, 1, 0, 3, 0, 1, 2, 0, 1, 2, 1, 0, 0, 1, 3, 2, 0, 0, 1, 3, 1, 0, 0, 2, 1, 2, 0, 1, 0, 1, 3, 0, 2, 0, 1, 3, 0, 1, 0, 2, 1, 2, 0, 0, 1, 1, 3, 0, 0, 2, 1, 3, 0, 0, 1, 2, 2, 3, 1, 1, 1, 0, 2, 1, 1, 1, -1, 2, 2, 0, 0, 0, 2, 3, 1, 1, 0, 1, 2, 1, 1, -1, 1, 2, 2, 0, 0, 0, 2, 3, 1, 0, 1, 1, 2, 1, -1, 1, 1, 2, 2, 0, 0, 0, 2, 3, 1, 1, 1, 0, 2, 1, 1, 1, -1, 2, 0, 2, 0, 0, 2, 3, 1, 1, 0, 1, 2, 1, 1, -1, 1, 2, 0, 2, 0, 0, 2, 3, 0, 1, 1, 1, 2, -1, 1, 1, 1, 2, 0, 2, 0, 0, 2, 3, 1, 1, 1, 0, 2, 1, 1, 1, -1, 2, 0, 0, 2, 0, 2, 3, 1, 0, 1, 1, 2, 1, -1, 1, 1, 2, 0, 0, 2, 0, 2, 3, 0, 1, 1, 1, 2, -1, 1, 1, 1, 2, 0, 0, 2, 0, 2, 3, 1, 1, 0, 1, 2, 1, 1, -1, 1, 2, 0, 0, 0, 2, 2, 3, 1, 0, 1, 1, 2, 1, -1, 1, 1, 2, 0, 0, 0, 2, 2, 3, 0, 1, 1, 1, 2, -1, 1, 1, 1, 2, 0, 0, 0, 2, 2, 1, 1, 1, -1, 0, 1, 1, 1, 0, -1, 0, 0, 0, 0, 0, 2, 1, 1, -1, 1, 0, 1, 1, 0, 1, -1, 0, 0, 0, 0, 0, 2, 1, -1, 1, 1, 0, 1, 0, 1, 1, -1, 0, 0, 0, 0, 0, 2, 1, 1, -1, 0, 1, 1, 1, 0, -1, 1, 0, 0, 0, 0, 0, 2, 1, -1, 1, 0, 1, 1, 0, 1, -1, 1, 0, 0, 0, 0, 0, 2, 1, -1, 0, 1, 1, 1, 0, -1, 1, 1, 0, 0, 0, 0, 0, 2, 1, 1, 1, -1, 0, 1, 1, 1, 0, -1, 2, 2, 0, 0, 0, 2, 1, 1, -1, 1, 0, 1, 1, 0, 1, -1, 2, 2, 0, 0, 0, 2, 1, 1, -1, 0, 1, 1, 1, 0, -1, 1, 2, 2, 0, 0, 0, 2, 1, 1, 1, -1, 0, 1, 1, 1, 0, -1, 2, 0, 2, 0, 0, 2, 1, -1, 1, 1, 0, 1, 0, 1, 1, -1, 2, 0, 2, 0, 0, 2, 1, -1, 1, 0, 1, 1, 0, 1, -1, 1, 2, 0, 2, 0, 0, 2, 1, 1, -1, 1, 0, 1, 1, 0, 1, -1, 2, 0, 0, 2, 0, 2, 1, -1, 1, 1, 0, 1, 0, 1, 1, -1, 2, 0, 0, 2, 0, 2, 1, -1, 0, 1, 1, 1, 0, -1, 1, 1, 2, 0, 0, 2, 0, 2, 1, 1, -1, 0, 1, 1, 1, 0, -1, 1, 2, 0, 0, 0, 2, 2, 1, -1, 1, 0, 1, 1, 0, 1, -1, 1, 2, 0, 0, 0, 2, 2, 1, -1, 0, 1, 1, 1, 0, -1, 1, 1, 2, 0, 0, 0, 2, 3, 1, 1, 0, 0, 0, 2, 2, 0, 0, 0, 2, 1, 1, 1, -1, 3, 1, 0, 1, 0, 0, 2, 0, 2, 0, 0, 2, 1, 1, 1, -1, 3, 1, 0, 0, 1, 0, 2, 0, 0, 2, 0, 2, 1, 1, 1, -1, 3, 1, 1, 0, 0, 0, 2, 2, 0, 0, 0, 2, 1, 1, -1, 1, 3, 1, 0, 1, 0, 0, 2, 0, 2, 0, 0, 2, 1, 1, -1, 1, 3, 1, 0, 0, 0, 1, 2, 0, 0, 0, 2, 2, 1, 1, -1, 1, 3, 1, 1, 0, 0, 0, 2, 2, 0, 0, 0, 2, 1, -1, 1, 1, 3, 1, 0, 0, 1, 0, 2, 0, 0, 2, 0, 2, 1, -1, 1, 1, 3, 1, 0, 0, 0, 1, 2, 0, 0, 0, 2, 2, 1, -1, 1, 1, 3, 1, 0, 1, 0, 0, 2, 0, 2, 0, 0, 2, -1, 1, 1, 1, 3, 1, 0, 0, 1, 0, 2, 0, 0, 2, 0, 2, -1, 1, 1, 1, 3, 1, 0, 0, 0, 1, 2, 0, 0, 0, 2, 2, -1, 1, 1, 1, 3, 3, 2, 1, 0, 0, 3, 1, 2, 0, 0, 4, 1, 1, 1, 1, 3, 3, 2, 0, 1, 0, 3, 1, 0, 2, 0, 4, 1, 1, 1, 1, 3, 3, 0, 2, 1, 0, 3, 0, 1, 2, 0, 4, 1, 1, 1, 1, 3, 3, 2, 0, 0, 1, 3, 1, 0, 0, 2, 4, 1, 1, 1, 1, 3, 3, 0, 2, 0, 1, 3, 0, 1, 0, 2, 4, 1, 1, 1, 1, 3, 3, 0, 0, 2, 1, 3, 0, 0, 1, 2, 4, 1, 1, 1, 1, 3, 3, 2, 1, 0, 0, 3, 1, 2, 0, 0, 2, 1, 1, 1, -1, 3, 3, 2, 0, 1, 0, 3, 1, 0, 2, 0, 2, 1, 1, 1, -1, 3, 3, 0, 2, 1, 0, 3, 0, 1, 2, 0, 2, 1, 1, 1, -1, 3, 3, 2, 1, 0, 0, 3, 1, 2, 0, 0, 2, 1, 1, -1, 1, 3, 3, 2, 0, 0, 1, 3, 1, 0, 0, 2, 2, 1, 1, -1, 1, 3, 3, 0, 2, 0, 1, 3, 0, 1, 0, 2, 2, 1, 1, -1, 1, 3, 3, 2, 0, 1, 0, 3, 1, 0, 2, 0, 2, 1, -1, 1, 1, 3, 3, 2, 0, 0, 1, 3, 1, 0, 0, 2, 2, 1, -1, 1, 1, 3, 3, 0, 0, 2, 1, 3, 0, 0, 1, 2, 2, 1, -1, 1, 1, 3, 3, 0, 2, 1, 0, 3, 0, 1, 2, 0, 2, -1, 1, 1, 1, 3, 3, 0, 2, 0, 1, 3, 0, 1, 0, 2, 2, -1, 1, 1, 1, 3, 3, 0, 0, 2, 1, 3, 0, 0, 1, 2, 2, -1, 1, 1, 1 };
+        var lookupPairs4D = new int[] { 0, 3, 1, 2, 2, 3, 5, 2, 6, 1, 7, 1, 8, 3, 9, 2, 10, 3, 13, 2, 16, 3, 18, 3, 22, 1, 23, 1, 24, 3, 26, 3, 33, 2, 37, 2, 38, 1, 39, 1, 41, 2, 45, 2, 54, 1, 55, 1, 56, 0, 57, 0, 58, 0, 59, 0, 60, 0, 61, 0, 62, 0, 63, 0, 256, 3, 258, 3, 264, 3, 266, 3, 272, 3, 274, 3, 280, 3, 282, 3, 2049, 2, 2053, 2, 2057, 2, 2061, 2, 2081, 2, 2085, 2, 2089, 2, 2093, 2, 2304, 9, 2305, 9, 2312, 9, 2313, 9, 16390, 1, 16391, 1, 16406, 1, 16407, 1, 16422, 1, 16423, 1, 16438, 1, 16439, 1, 16642, 8, 16646, 8, 16658, 8, 16662, 8, 18437, 6, 18439, 6, 18469, 6, 18471, 6, 18688, 9, 18689, 9, 18690, 8, 18693, 6, 18694, 8, 18695, 6, 18696, 9, 18697, 9, 18706, 8, 18710, 8, 18725, 6, 18727, 6, 131128, 0, 131129, 0, 131130, 0, 131131, 0, 131132, 0, 131133, 0, 131134, 0, 131135, 0, 131352, 7, 131354, 7, 131384, 7, 131386, 7, 133161, 5, 133165, 5, 133177, 5, 133181, 5, 133376, 9, 133377, 9, 133384, 9, 133385, 9, 133400, 7, 133402, 7, 133417, 5, 133421, 5, 133432, 7, 133433, 5, 133434, 7, 133437, 5, 147510, 4, 147511, 4, 147518, 4, 147519, 4, 147714, 8, 147718, 8, 147730, 8, 147734, 8, 147736, 7, 147738, 7, 147766, 4, 147767, 4, 147768, 7, 147770, 7, 147774, 4, 147775, 4, 149509, 6, 149511, 6, 149541, 6, 149543, 6, 149545, 5, 149549, 5, 149558, 4, 149559, 4, 149561, 5, 149565, 5, 149566, 4, 149567, 4, 149760, 9, 149761, 9, 149762, 8, 149765, 6, 149766, 8, 149767, 6, 149768, 9, 149769, 9, 149778, 8, 149782, 8, 149784, 7, 149786, 7, 149797, 6, 149799, 6, 149801, 5, 149805, 5, 149814, 4, 149815, 4, 149816, 7, 149817, 5, 149818, 7, 149821, 5, 149822, 4, 149823, 4, 149824, 37, 149825, 37, 149826, 36, 149829, 34, 149830, 36, 149831, 34, 149832, 37, 149833, 37, 149842, 36, 149846, 36, 149848, 35, 149850, 35, 149861, 34, 149863, 34, 149865, 33, 149869, 33, 149878, 32, 149879, 32, 149880, 35, 149881, 33, 149882, 35, 149885, 33, 149886, 32, 149887, 32, 150080, 49, 150082, 48, 150088, 49, 150098, 48, 150104, 47, 150106, 47, 151873, 46, 151877, 45, 151881, 46, 151909, 45, 151913, 44, 151917, 44, 152128, 49, 152129, 46, 152136, 49, 152137, 46, 166214, 43, 166215, 42, 166230, 43, 166247, 42, 166262, 41, 166263, 41, 166466, 48, 166470, 43, 166482, 48, 166486, 43, 168261, 45, 168263, 42, 168293, 45, 168295, 42, 168512, 31, 168513, 28, 168514, 31, 168517, 28, 168518, 25, 168519, 25, 280952, 40, 280953, 39, 280954, 40, 280957, 39, 280958, 38, 280959, 38, 281176, 47, 281178, 47, 281208, 40, 281210, 40, 282985, 44, 282989, 44, 283001, 39, 283005, 39, 283208, 30, 283209, 27, 283224, 30, 283241, 27, 283256, 22, 283257, 22, 297334, 41, 297335, 41, 297342, 38, 297343, 38, 297554, 29, 297558, 24, 297562, 29, 297590, 24, 297594, 21, 297598, 21, 299365, 26, 299367, 23, 299373, 26, 299383, 23, 299389, 20, 299391, 20, 299584, 31, 299585, 28, 299586, 31, 299589, 28, 299590, 25, 299591, 25, 299592, 30, 299593, 27, 299602, 29, 299606, 24, 299608, 30, 299610, 29, 299621, 26, 299623, 23, 299625, 27, 299629, 26, 299638, 24, 299639, 23, 299640, 22, 299641, 22, 299642, 21, 299645, 20, 299646, 21, 299647, 20, 299648, 61, 299649, 60, 299650, 61, 299653, 60, 299654, 59, 299655, 59, 299656, 58, 299657, 57, 299666, 55, 299670, 54, 299672, 58, 299674, 55, 299685, 52, 299687, 51, 299689, 57, 299693, 52, 299702, 54, 299703, 51, 299704, 56, 299705, 56, 299706, 53, 299709, 50, 299710, 53, 299711, 50, 299904, 61, 299906, 61, 299912, 58, 299922, 55, 299928, 58, 299930, 55, 301697, 60, 301701, 60, 301705, 57, 301733, 52, 301737, 57, 301741, 52, 301952, 79, 301953, 79, 301960, 76, 301961, 76, 316038, 59, 316039, 59, 316054, 54, 316071, 51, 316086, 54, 316087, 51, 316290, 78, 316294, 78, 316306, 73, 316310, 73, 318085, 77, 318087, 77, 318117, 70, 318119, 70, 318336, 79, 318337, 79, 318338, 78, 318341, 77, 318342, 78, 318343, 77, 430776, 56, 430777, 56, 430778, 53, 430781, 50, 430782, 53, 430783, 50, 431000, 75, 431002, 72, 431032, 75, 431034, 72, 432809, 74, 432813, 69, 432825, 74, 432829, 69, 433032, 76, 433033, 76, 433048, 75, 433065, 74, 433080, 75, 433081, 74, 447158, 71, 447159, 68, 447166, 71, 447167, 68, 447378, 73, 447382, 73, 447386, 72, 447414, 71, 447418, 72, 447422, 71, 449189, 70, 449191, 70, 449197, 69, 449207, 68, 449213, 69, 449215, 68, 449408, 67, 449409, 67, 449410, 66, 449413, 64, 449414, 66, 449415, 64, 449416, 67, 449417, 67, 449426, 66, 449430, 66, 449432, 65, 449434, 65, 449445, 64, 449447, 64, 449449, 63, 449453, 63, 449462, 62, 449463, 62, 449464, 65, 449465, 63, 449466, 65, 449469, 63, 449470, 62, 449471, 62, 449472, 19, 449473, 19, 449474, 18, 449477, 16, 449478, 18, 449479, 16, 449480, 19, 449481, 19, 449490, 18, 449494, 18, 449496, 17, 449498, 17, 449509, 16, 449511, 16, 449513, 15, 449517, 15, 449526, 14, 449527, 14, 449528, 17, 449529, 15, 449530, 17, 449533, 15, 449534, 14, 449535, 14, 449728, 19, 449729, 19, 449730, 18, 449734, 18, 449736, 19, 449737, 19, 449746, 18, 449750, 18, 449752, 17, 449754, 17, 449784, 17, 449786, 17, 451520, 19, 451521, 19, 451525, 16, 451527, 16, 451528, 19, 451529, 19, 451557, 16, 451559, 16, 451561, 15, 451565, 15, 451577, 15, 451581, 15, 451776, 19, 451777, 19, 451784, 19, 451785, 19, 465858, 18, 465861, 16, 465862, 18, 465863, 16, 465874, 18, 465878, 18, 465893, 16, 465895, 16, 465910, 14, 465911, 14, 465918, 14, 465919, 14, 466114, 18, 466118, 18, 466130, 18, 466134, 18, 467909, 16, 467911, 16, 467941, 16, 467943, 16, 468160, 13, 468161, 13, 468162, 13, 468163, 13, 468164, 13, 468165, 13, 468166, 13, 468167, 13, 580568, 17, 580570, 17, 580585, 15, 580589, 15, 580598, 14, 580599, 14, 580600, 17, 580601, 15, 580602, 17, 580605, 15, 580606, 14, 580607, 14, 580824, 17, 580826, 17, 580856, 17, 580858, 17, 582633, 15, 582637, 15, 582649, 15, 582653, 15, 582856, 12, 582857, 12, 582872, 12, 582873, 12, 582888, 12, 582889, 12, 582904, 12, 582905, 12, 596982, 14, 596983, 14, 596990, 14, 596991, 14, 597202, 11, 597206, 11, 597210, 11, 597214, 11, 597234, 11, 597238, 11, 597242, 11, 597246, 11, 599013, 10, 599015, 10, 599021, 10, 599023, 10, 599029, 10, 599031, 10, 599037, 10, 599039, 10, 599232, 13, 599233, 13, 599234, 13, 599235, 13, 599236, 13, 599237, 13, 599238, 13, 599239, 13, 599240, 12, 599241, 12, 599250, 11, 599254, 11, 599256, 12, 599257, 12, 599258, 11, 599262, 11, 599269, 10, 599271, 10, 599272, 12, 599273, 12, 599277, 10, 599279, 10, 599282, 11, 599285, 10, 599286, 11, 599287, 10, 599288, 12, 599289, 12, 599290, 11, 599293, 10, 599294, 11, 599295, 10 };
+        var contributions4D = new Contribution4[p4D.Length / 16];
+        for (int i = 0; i < p4D.Length; i += 16)
+        {
+            var baseSet = base4D[p4D[i]];
+            Contribution4 previous = null, current = null;
+            for (int k = 0; k < baseSet.Length; k += 5)
+            {
+                current = new Contribution4(baseSet[k], baseSet[k + 1], baseSet[k + 2], baseSet[k + 3], baseSet[k + 4]);
+                if (previous == null)
+                {
+                    contributions4D[i / 16] = current;
+                }
+                else
+                {
+                    previous.Next = current;
+                }
+                previous = current;
+            }
+            current.Next = new Contribution4(p4D[i + 1], p4D[i + 2], p4D[i + 3], p4D[i + 4], p4D[i + 5]);
+            current.Next.Next = new Contribution4(p4D[i + 6], p4D[i + 7], p4D[i + 8], p4D[i + 9], p4D[i + 10]);
+            current.Next.Next.Next = new Contribution4(p4D[i + 11], p4D[i + 12], p4D[i + 13], p4D[i + 14], p4D[i + 15]);
+        }
+
+        lookup4D = new Contribution4[1048576];
+        for (var i = 0; i < lookupPairs4D.Length; i += 2)
+        {
+            lookup4D[lookupPairs4D[i]] = contributions4D[lookupPairs4D[i + 1]];
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static int FastFloor(double x)
+    {
+        var xi = (int)x;
+        return x < xi ? xi - 1 : xi;
+    }
+
+    public SimplexNoiseGenerator()
+        : this(DateTime.Now.Ticks)
+    {
+    }
+
+    public SimplexNoiseGenerator(long seed)
+    {
+        perm = new byte[256];
+        perm2D = new byte[256];
+        perm3D = new byte[256];
+        perm4D = new byte[256];
+        var source = new byte[256];
+        for (int i = 0; i < 256; i++)
+        {
+            source[i] = (byte)i;
+        }
+        seed = seed * 6364136223846793005L + 1442695040888963407L;
+        seed = seed * 6364136223846793005L + 1442695040888963407L;
+        seed = seed * 6364136223846793005L + 1442695040888963407L;
+        for (int i = 255; i >= 0; i--)
+        {
+            seed = seed * 6364136223846793005L + 1442695040888963407L;
+            int r = (int)((seed + 31) % (i + 1));
+            if (r < 0)
+            {
+                r += (i + 1);
+            }
+            perm[i] = source[r];
+            perm2D[i] = (byte)(perm[i] & 0x0E);
+            perm3D[i] = (byte)((perm[i] % 24) * 3);
+            perm4D[i] = (byte)(perm[i] & 0xFC);
+            source[r] = source[i];
+        }
+    }
+
+    public double Evaluate(double x, double y)
+    {
+        var stretchOffset = (x + y) * STRETCH_2D;
+        var xs = x + stretchOffset;
+        var ys = y + stretchOffset;
+
+        var xsb = FastFloor(xs);
+        var ysb = FastFloor(ys);
+
+        var squishOffset = (xsb + ysb) * SQUISH_2D;
+        var dx0 = x - (xsb + squishOffset);
+        var dy0 = y - (ysb + squishOffset);
+
+        var xins = xs - xsb;
+        var yins = ys - ysb;
+
+        var inSum = xins + yins;
+
+        var hash =
+            (int)(xins - yins + 1) |
+            (int)(inSum) << 1 |
+            (int)(inSum + yins) << 2 |
+            (int)(inSum + xins) << 4;
+
+        var c = lookup2D[hash];
+
+        var value = 0.0;
+        while (c != null)
+        {
+            var dx = dx0 + c.dx;
+            var dy = dy0 + c.dy;
+            var attn = 2 - dx * dx - dy * dy;
+            if (attn > 0)
+            {
+                var px = xsb + c.xsb;
+                var py = ysb + c.ysb;
+
+                var i = perm2D[(perm[px & 0xFF] + py) & 0xFF];
+                var valuePart = gradients2D[i] * dx + gradients2D[i + 1] * dy;
+
+                attn *= attn;
+                value += attn * attn * valuePart;
+            }
+            c = c.Next;
+        }
+        return value * NORM_2D;
+    }
+
+    public double Evaluate(double x, double y, double z)
+    {
+        var stretchOffset = (x + y + z) * STRETCH_3D;
+        var xs = x + stretchOffset;
+        var ys = y + stretchOffset;
+        var zs = z + stretchOffset;
+
+        var xsb = FastFloor(xs);
+        var ysb = FastFloor(ys);
+        var zsb = FastFloor(zs);
+
+        var squishOffset = (xsb + ysb + zsb) * SQUISH_3D;
+        var dx0 = x - (xsb + squishOffset);
+        var dy0 = y - (ysb + squishOffset);
+        var dz0 = z - (zsb + squishOffset);
+
+        var xins = xs - xsb;
+        var yins = ys - ysb;
+        var zins = zs - zsb;
+
+        var inSum = xins + yins + zins;
+
+        var hash =
+            (int)(yins - zins + 1) |
+            (int)(xins - yins + 1) << 1 |
+            (int)(xins - zins + 1) << 2 |
+            (int)inSum << 3 |
+            (int)(inSum + zins) << 5 |
+            (int)(inSum + yins) << 7 |
+            (int)(inSum + xins) << 9;
+
+        var c = lookup3D[hash];
+
+        var value = 0.0;
+        while (c != null)
+        {
+            var dx = dx0 + c.dx;
+            var dy = dy0 + c.dy;
+            var dz = dz0 + c.dz;
+            var attn = 2 - dx * dx - dy * dy - dz * dz;
+            if (attn > 0)
+            {
+                var px = xsb + c.xsb;
+                var py = ysb + c.ysb;
+                var pz = zsb + c.zsb;
+
+                var i = perm3D[(perm[(perm[px & 0xFF] + py) & 0xFF] + pz) & 0xFF];
+                var valuePart = gradients3D[i] * dx + gradients3D[i + 1] * dy + gradients3D[i + 2] * dz;
+
+                attn *= attn;
+                value += attn * attn * valuePart;
+            }
+
+            c = c.Next;
+        }
+        return value * NORM_3D;
+    }
+
+    public double Evaluate(double x, double y, double z, double w)
+    {
+        var stretchOffset = (x + y + z + w) * STRETCH_4D;
+        var xs = x + stretchOffset;
+        var ys = y + stretchOffset;
+        var zs = z + stretchOffset;
+        var ws = w + stretchOffset;
+
+        var xsb = FastFloor(xs);
+        var ysb = FastFloor(ys);
+        var zsb = FastFloor(zs);
+        var wsb = FastFloor(ws);
+
+        var squishOffset = (xsb + ysb + zsb + wsb) * SQUISH_4D;
+        var dx0 = x - (xsb + squishOffset);
+        var dy0 = y - (ysb + squishOffset);
+        var dz0 = z - (zsb + squishOffset);
+        var dw0 = w - (wsb + squishOffset);
+
+        var xins = xs - xsb;
+        var yins = ys - ysb;
+        var zins = zs - zsb;
+        var wins = ws - wsb;
+
+        var inSum = xins + yins + zins + wins;
+
+        var hash =
+            (int)(zins - wins + 1) |
+            (int)(yins - zins + 1) << 1 |
+            (int)(yins - wins + 1) << 2 |
+            (int)(xins - yins + 1) << 3 |
+            (int)(xins - zins + 1) << 4 |
+            (int)(xins - wins + 1) << 5 |
+            (int)inSum << 6 |
+            (int)(inSum + wins) << 8 |
+            (int)(inSum + zins) << 11 |
+            (int)(inSum + yins) << 14 |
+            (int)(inSum + xins) << 17;
+
+        var c = lookup4D[hash];
+
+        var value = 0.0;
+        while (c != null)
+        {
+            var dx = dx0 + c.dx;
+            var dy = dy0 + c.dy;
+            var dz = dz0 + c.dz;
+            var dw = dw0 + c.dw;
+            var attn = 2 - dx * dx - dy * dy - dz * dz - dw * dw;
+            if (attn > 0)
+            {
+                var px = xsb + c.xsb;
+                var py = ysb + c.ysb;
+                var pz = zsb + c.zsb;
+                var pw = wsb + c.wsb;
+
+                var i = perm4D[(perm[(perm[(perm[px & 0xFF] + py) & 0xFF] + pz) & 0xFF] + pw) & 0xFF];
+                var valuePart = gradients4D[i] * dx + gradients4D[i + 1] * dy + gradients4D[i + 2] * dz + gradients4D[i + 3] * dw;
+
+                attn *= attn;
+                value += attn * attn * valuePart;
+            }
+
+            c = c.Next;
+        }
+        return value * NORM_4D;
+    }
+
+    private class Contribution2
+    {
+        public double dx, dy;
+        public int xsb, ysb;
+        public Contribution2 Next;
+
+        public Contribution2(double multiplier, int xsb, int ysb)
+        {
+            dx = -xsb - multiplier * SQUISH_2D;
+            dy = -ysb - multiplier * SQUISH_2D;
+            this.xsb = xsb;
+            this.ysb = ysb;
+        }
+    }
+
+    private class Contribution3
+    {
+        public double dx, dy, dz;
+        public int xsb, ysb, zsb;
+        public Contribution3 Next;
+
+        public Contribution3(double multiplier, int xsb, int ysb, int zsb)
+        {
+            dx = -xsb - multiplier * SQUISH_3D;
+            dy = -ysb - multiplier * SQUISH_3D;
+            dz = -zsb - multiplier * SQUISH_3D;
+            this.xsb = xsb;
+            this.ysb = ysb;
+            this.zsb = zsb;
+        }
+    }
+
+    private class Contribution4
+    {
+        public double dx, dy, dz, dw;
+        public int xsb, ysb, zsb, wsb;
+        public Contribution4 Next;
+
+        public Contribution4(double multiplier, int xsb, int ysb, int zsb, int wsb)
+        {
+            dx = -xsb - multiplier * SQUISH_4D;
+            dy = -ysb - multiplier * SQUISH_4D;
+            dz = -zsb - multiplier * SQUISH_4D;
+            dw = -wsb - multiplier * SQUISH_4D;
+            this.xsb = xsb;
+            this.ysb = ysb;
+            this.zsb = zsb;
+            this.wsb = wsb;
+        }
+    }
 }
