@@ -1,5 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
+using Unity.Collections;
+using Unity.Mathematics;
 using UnityEngine;
 using UnityEngine.SocialPlatforms.GameCenter;
 using UnityEngine.Tilemaps;
@@ -12,7 +14,7 @@ public class TerrainChunk
     bool remove = false;
     GameObject myObject;
     Mesh mesh;
-    public Vector2 position;
+    public Vector3 position;
     Vector2 viewPosition;
     public int width, height;
     public float featureSize;
@@ -25,10 +27,9 @@ public class TerrainChunk
     Color mainColor;
     SimplexNoiseGenerator noise;
     Material terrainMat;
-    public TerrainChunk(Material terrainMat, SimplexNoiseGenerator noise, Transform parent, Vector3[] vertices, Vector2[] uv, Dictionary<Vector2, TileData> tileData, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors, Color mainColor)
+    public TerrainChunk(Material terrainMat, Transform parent, Vector3[] vertices, Vector2[] uv, Dictionary<Vector2, TileData> tileData, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors, Color mainColor)
     {
         this.terrainMat = terrainMat;
-        this.noise = noise;
         this.parent = parent;
         this.vertices = vertices;
         this.uv = uv;
@@ -59,16 +60,12 @@ public class TerrainChunk
         mesh.name = "Chunk Mesh" + viewPosition;
         //Create list to add triangles
         List<int> trianglesList = new List<int>();
-
-        foreach (Vector2 key in tileDictionary.Keys)
+        foreach (TileData tileData in tileDictionary.Values)
         {
-            TileData tileData = tileDictionary[key];
-            Vector3 pos = new Vector3((position.x + key.x) / featureSize, (position.y + key.y) / featureSize);
-            float val = (float)noise.Evaluate(pos.x, pos.y, pos.z);
-            if (GetTileStateFromNoise(val))
+            //Vector3 pos = new Vector3((position.x + key.x) / featureSize, (position.y + key.y) / featureSize);
+            //float val = (float)noise.Evaluate(pos.x, pos.y, pos.z);
+            if (tileData.GetState())
             {
-                tileData.SetState(true);
-
                 int vi = tileData.GetVertexIndex();
                 if (vi != -1)
                 {
@@ -88,17 +85,9 @@ public class TerrainChunk
                     colors[vi + 3] = mainColor;
                 }
             }
-            else
-            {
-                tileData.SetState(false);
-            }
         }
-
         mesh.vertices = vertices;
         UpdateTileUV();
-
-        myObject.AddComponent<CompositeCollider2D>();
-        myObject.GetComponent<Rigidbody2D>().bodyType = RigidbodyType2D.Static;
 
         //Set mesh triangles
         mesh.triangles = trianglesList.ToArray();
@@ -114,6 +103,15 @@ public class TerrainChunk
         myObject.GetComponent<MeshFilter>().sharedMesh = mesh;
         //Set loaded = true to denote chunk being generated
         loaded = true;
+    }
+    public void SetTileStatesFromNativeList(NativeList<bool> tileStates)
+    {
+        int index = 0;
+        foreach(TileData tileData in tileDictionary.Values)
+        {
+            tileData.SetState(tileStates[index]);
+            index++;
+        }
     }
     /// <summary>
     /// Returns state of tile based on noise val and same arbitrary number
@@ -155,9 +153,8 @@ public class TerrainChunk
     {
         float tileWidth = tilesetLookup.getTileWidth() / (float)spritemap.width;
         float tileHeight = tilesetLookup.getTileHeight() / (float)spritemap.height;
-        foreach (Vector2 key in tileDictionary.Keys)
+        foreach (TileData tileData in tileDictionary.Values)
         {
-            TileData tileData = tileDictionary[key];
             if (tileData.GetVertexIndex() != -1)
             {
                 TileData tileTL = tileData.adjTiles[0];
@@ -228,7 +225,6 @@ public class TerrainChunk
                 {
                     BoxCollider2D box = myObject.AddComponent<BoxCollider2D>();
                     box.offset = new Vector2(vertices[vi].x+0.5f,vertices[vi].y+0.5f);
-                    box.usedByComposite = true;
                 }
                 Vector2 uvCoord = tilesetLookup.GetPosition(tileName);
                 float textureOffsetX = uvCoord.x / (float)spritemap.width;

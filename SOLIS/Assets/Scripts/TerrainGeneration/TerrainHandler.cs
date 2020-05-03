@@ -14,7 +14,7 @@ public class TerrainHandler : MonoBehaviour
     {
         Init();
     }
-    private void FixedUpdate()
+    private void Update()
     {
         UpdatePlanetRender(planet);
     }
@@ -54,10 +54,10 @@ public class TerrainHandler : MonoBehaviour
                     //Chunk should not be removed
                     tc.SetRemove(false);
                     //Check if chunk is not loaded
-                    if (!tc.IsLoaded())
+                    /*if (!tc.IsLoaded())
                     {
                         tc.GenerateChunk();
-                    }
+                    }*/
                 }
                 else
                 {
@@ -66,6 +66,8 @@ public class TerrainHandler : MonoBehaviour
                 }
             }
         }
+        p.GenerateAllNewChunks(defaultLoader.chunkWidth,defaultLoader.chunkHeight);
+
         //Calculate chunks to be removed
         p.AddChunksToRemoveList();
 

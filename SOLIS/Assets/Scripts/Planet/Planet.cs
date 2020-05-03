@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
@@ -24,7 +23,6 @@ public class Planet : MonoBehaviour
 
     Dictionary<Vector2, TerrainChunk> chunkDictionary = new Dictionary<Vector2, TerrainChunk>();
 
-    SimplexNoiseGenerator noise;
     public void Start()
     {
         Init();
@@ -35,7 +33,6 @@ public class Planet : MonoBehaviour
     public void Init()
     {
         tilesetLookup = new TilesetLookup(AssetDatabase.GetAssetPath(tilesetLookupFile), AssetDatabase.GetAssetPath(tilesetTriangulationFile));
-        noise = new SimplexNoiseGenerator(planetSettings.planetSeed);
         planetTexture = new Texture2D(400, 400);
         CreatePlanetTexture();
     }
@@ -60,15 +57,17 @@ public class Planet : MonoBehaviour
         {
             for(int j = 0; j < planetTexture.height; j++)
             {
-                float val = (float)noise.Evaluate((i-planetTexture.width/2)/planetSettings.planetFeatureSize,(j-planetTexture.height/2)/planetSettings.planetFeatureSize,0);
-                if(val >= -0.4f)
+                float4 pos = new float4((i - planetTexture.width / 2) / planetSettings.planetFeatureSize, (j - planetTexture.height / 2) / planetSettings.planetFeatureSize, 0, planetSettings.planetSeed);
+                float val = PlanetNoise.GetValueAtPosition(pos);
+                /*if(PlanetNoise.GetStateFromPos(pos))
                 {
                     planetTexture.SetPixel(i,j, planetSettings.terrainColor);
                 }
                 else
                 {
                     planetTexture.SetPixel(i, j, planetSettings.waterColor);
-                }
+                }*/
+                planetTexture.SetPixel(i, j, new Color(val, val, val));
             }
         
         }
@@ -113,9 +112,51 @@ public class Planet : MonoBehaviour
     /// </summary>
     public void CreateChunk(Vector2 chunkCoord, int chunkWidth, int chunkHeight, Vector2 viewChunkCoord, Vector3[] vertices, Vector2[] uv, Color[] defaultColor, Dictionary<Vector2,TileData> tileData)
     {
-        TerrainChunk chunk = new TerrainChunk(terrainMat, noise, transform, vertices, uv, tileData, terrainSpritemap, tilesetLookup, chunkCoord, viewChunkCoord, chunkWidth, chunkHeight, planetSettings.planetFeatureSize, defaultColor, planetSettings.terrainColor);
-        chunk.GenerateChunk();
+        TerrainChunk chunk = new TerrainChunk(terrainMat, transform, vertices, uv, tileData, terrainSpritemap, tilesetLookup, chunkCoord, viewChunkCoord, chunkWidth, chunkHeight, planetSettings.planetFeatureSize, defaultColor, planetSettings.terrainColor);
         chunkDictionary.Add(chunkCoord, chunk);
+        newChunks.Add(chunkCoord, chunk);
+    }
+    Dictionary<Vector2, TerrainChunk> newChunks = new Dictionary<Vector2, TerrainChunk>();
+
+    List<NativeList<bool>> chunkBoolMap = new List<NativeList<bool>>();
+    public void GenerateAllNewChunks(int chunkWidth, int chunkHeight)
+    {
+        if (newChunks.Count > 0)
+        {
+            NativeList<JobHandle> jobHandleList = new NativeList<JobHandle>(Allocator.Temp);
+            foreach (TerrainChunk c in newChunks.Values)
+            {
+                //NativeHashMap<float2, bool> stateMap = new NativeHashMap<float2, bool>(chunkWidth * chunkHeight, Allocator.TempJob);
+                NativeList<bool> stateList = new NativeList<bool>(chunkWidth*chunkHeight,Allocator.TempJob);
+                GenerateChunkJob chunkJob = new GenerateChunkJob
+                {
+                    width = chunkWidth,
+                    height = chunkHeight,
+                    position = c.position,
+                    seed = planetSettings.planetSeed,
+                    featureSize = planetSettings.planetFeatureSize,
+                    tileStates = stateList
+                };
+                chunkBoolMap.Add(stateList);
+                jobHandleList.Add(chunkJob.Schedule());
+            }
+            JobHandle.CompleteAll(jobHandleList);
+
+            int index = 0;
+
+            foreach (TerrainChunk c in newChunks.Values)
+            {
+                c.SetTileStatesFromNativeList(chunkBoolMap[index]);
+                c.GenerateChunk();
+
+                chunkBoolMap[index].Dispose();
+                index++;
+            }
+            jobHandleList.Dispose();
+
+            chunkBoolMap.Clear();
+            newChunks.Clear();
+        }
     }
     /// <summary>
     /// Remove chunk from dictionary at given location
@@ -153,6 +194,29 @@ public class Planet : MonoBehaviour
         foreach (Vector2 key in keysToRemove)
         {
             RemoveChunkFromDictionary(key);
+        }
+    }
+}
+
+[BurstCompile]
+public struct GenerateChunkJob : IJob
+{
+    public int seed;
+    public float featureSize;
+    public int width, height;
+
+    public float3 position;
+    public NativeList<bool> tileStates;
+
+    public void Execute()
+    {
+        for(int j = -1; j <= height; j++)
+        {
+            for(int i = -1; i <= width; i++)
+            {
+                float4 tilePos = new float4((position.x + i) / featureSize, (position.y + j) / featureSize, 0 ,seed);
+                tileStates.Add(PlanetNoise.GetStateFromPos(tilePos));
+            }
         }
     }
 }

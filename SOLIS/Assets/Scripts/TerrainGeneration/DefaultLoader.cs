@@ -21,30 +21,20 @@ public class DefaultLoader : MonoBehaviour
     public void CreateDefaultTileData()
     {
         int vi = 0;
-        int xPos = 0, yPos = 0;
-        int length = (chunkWidth * chunkHeight) * 4;
-        while (vi < length)
+        for(int j = -1; j <= chunkHeight; j++)
         {
-            defaultTileData.Add(new Vector2(xPos, yPos), new TileData(vi, true));
-            vi += 4;
-
-            xPos++;
-            if (xPos >= chunkWidth)
+            for(int i = -1; i <= chunkWidth; i++)
             {
-                yPos++;
-                xPos = 0;
+                if(i == -1 || j == -1 || i == chunkWidth || j == chunkHeight)
+                {
+                    defaultTileData.Add(new Vector2(i, j), new TileData(-1, true));
+                }
+                else
+                {
+                    defaultTileData.Add(new Vector2(i, j), new TileData(vi, true));
+                    vi += 4;
+                }
             }
-        }
-        for (int i = -1; i <= chunkWidth; i++)
-        {
-            //Calculate noise position at x for top and bottom row
-            defaultTileData.Add(new Vector2(i, -1), new TileData(-1, true));
-            defaultTileData.Add(new Vector2(i, chunkHeight), new TileData(-1, true));
-        }
-        for (int j = 0; j < chunkHeight; j++)
-        {
-            defaultTileData.Add(new Vector2(-1, j), new TileData(-1, true));
-            defaultTileData.Add(new Vector2(chunkWidth, j), new TileData(-1, true));
         }
     }
     private void SetTileAdjacents()
