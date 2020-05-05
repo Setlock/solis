@@ -1,11 +1,7 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using Unity.Collections;
-using Unity.Mathematics;
 using UnityEngine;
-using UnityEngine.SocialPlatforms.GameCenter;
 using UnityEngine.Tilemaps;
-using UnityEngine.UIElements;
 
 public class TerrainChunk
 {
@@ -27,8 +23,13 @@ public class TerrainChunk
     Color mainColor;
     SimplexNoiseGenerator noise;
     Material terrainMat;
+    GameObject treePrefab;
+    System.Random rand;
+    Color[] treeColors;
     public TerrainChunk(Material terrainMat, Transform parent, Vector3[] vertices, Vector2[] uv, Dictionary<Vector2, TileData> tileData, Texture2D spritemap, TilesetLookup tilesetLookup, Vector2 position, Vector2 viewPosition, int width, int height, float featureSize, Color[] colors, Color mainColor)
     {
+        string randomSeed = (int)(position.x) + "" + (int)(Mathf.Abs(position.y));
+        rand = new System.Random(int.Parse(randomSeed));
         this.terrainMat = terrainMat;
         this.parent = parent;
         this.vertices = vertices;
@@ -43,6 +44,17 @@ public class TerrainChunk
         this.featureSize = featureSize;
         this.colors = colors;
         this.mainColor = mainColor;
+    }
+    public void SetPrefab(string name, GameObject prefab)
+    {
+        if (name.Equals("tree"))
+        {
+            this.treePrefab = prefab;
+        }
+    }
+    public void SetTreeColor(Color[] c)
+    {
+        this.treeColors = c;
     }
     public void GenerateChunk()
     {
@@ -84,6 +96,12 @@ public class TerrainChunk
                     colors[vi + 2] = mainColor;
                     colors[vi + 3] = mainColor;
                 }
+                if(rand.Next(200) == 0)
+                {
+                    GameObject treeObject = GameObject.Instantiate(treePrefab, new Vector3(position.x + tileData.position.x, position.y + tileData.position.y + treePrefab.transform.GetChild(0).GetComponent<SpriteRenderer>().bounds.size.y/2), myObject.transform.rotation);
+                    treeObject.transform.parent = myObject.transform;
+                    treeObject.GetComponent<TreeEntity>().colors = treeColors;
+                }
             }
         }
         mesh.vertices = vertices;
@@ -96,7 +114,7 @@ public class TerrainChunk
         //Set material texture to use terrain spritemap
         //Set Mesh material to created material
         myObject.GetComponent<MeshRenderer>().sharedMaterial = terrainMat;
-        myObject.GetComponent<MeshRenderer>().sortingOrder = 2;
+        myObject.GetComponent<MeshRenderer>().sortingLayerName = "Terrain";
         //Optimize mesh
         mesh.Optimize();
         //Set GameObject mesh to generated mesh
@@ -262,12 +280,14 @@ public class TerrainChunk
 }
 public class TileData
 {
+    public Vector2 position;
     public TileData[] adjTiles = new TileData[8];
     int vertexIndex;
     bool state = false;
     int binaryState = 0;
-    public TileData(int vi, bool state)
+    public TileData(Vector2 position, int vi, bool state)
     {
+        this.position = position;
         this.vertexIndex = vi;
         this.state = state;
         if (state)

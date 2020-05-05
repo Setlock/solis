@@ -1,32 +1,28 @@
-﻿using JetBrains.Annotations;
-using System;
-using System.Collections;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
-using UnityEditor.UIElements;
 using UnityEngine;
 
 public class TilesetLookup
 {
-    string posFilename = "";
-    string triangulationFilename = "";
+    TextAsset positions, triangulation;
     int tileWidth, tileHeight;
     Dictionary<string, Vector2Int> posDictionary = new Dictionary<string, Vector2Int>();
     Dictionary<string, string> triangulationDictionary = new Dictionary<string, string>();
-    public TilesetLookup(string posFilename, string triangulationFilename)
+    public TilesetLookup(TextAsset positions, TextAsset triangulation)
     {
-        this.posFilename = posFilename;
-        this.triangulationFilename = triangulationFilename;
+        this.positions = positions;
+        this.triangulation = triangulation;
         CreateDictionaries();
     }
     private void CreateDictionaries()
     {
-        StreamReader reader = new StreamReader(posFilename);
+        StringReader reader = new StringReader(positions.text);
         String firstline = reader.ReadLine();
         int commaPos = firstline.IndexOf(",");
         tileWidth = int.Parse(firstline.Substring(0, commaPos));
         tileHeight = int.Parse(firstline.Substring(commaPos + 1));
-        while (!reader.EndOfStream)
+        while (reader.Peek() != -1)
         {
             string line = reader.ReadLine();
             if (line.Length > 1)
@@ -44,8 +40,8 @@ public class TilesetLookup
                 posDictionary.Add(name, pos);
             }
         }
-        reader = new StreamReader(triangulationFilename);
-        while (!reader.EndOfStream)
+        reader = new StringReader(triangulation.text);
+        while (reader.Peek() != -1)
         {
             string line = reader.ReadLine();
             if (line.Length > 1)

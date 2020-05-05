@@ -27,11 +27,11 @@ public class DefaultLoader : MonoBehaviour
             {
                 if(i == -1 || j == -1 || i == chunkWidth || j == chunkHeight)
                 {
-                    defaultTileData.Add(new Vector2(i, j), new TileData(-1, true));
+                    defaultTileData.Add(new Vector2(i, j), new TileData(new Vector2(i,j),-1, true));
                 }
                 else
                 {
-                    defaultTileData.Add(new Vector2(i, j), new TileData(vi, true));
+                    defaultTileData.Add(new Vector2(i, j), new TileData(new Vector2(i,j),vi, true));
                     vi += 4;
                 }
             }

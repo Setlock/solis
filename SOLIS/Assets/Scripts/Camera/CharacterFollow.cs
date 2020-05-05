@@ -1,5 +1,6 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
+using System.Security.Cryptography;
 using UnityEngine;
 
 public class CharacterFollow : MonoBehaviour
@@ -15,7 +16,7 @@ public class CharacterFollow : MonoBehaviour
 
         //Linearly interpolate between point and move camera to that position
         Vector2 lerp = Vector2.Lerp(transform.position, desiredPositon, smoothSpeed);
-        Vector3 smoothedPosition = new Vector3(lerp.x,lerp.y, transform.position.z);
+        Vector3 smoothedPosition = new Vector3(desiredPositon.x, desiredPositon.y, transform.position.z);
         transform.position = smoothedPosition;
 
         //If Q key is pressed increase view size to "zoom out"
@@ -30,6 +31,10 @@ public class CharacterFollow : MonoBehaviour
             {
                 GetComponent<Camera>().orthographicSize -= zoomSpeed;
             }
+        }
+        if (Input.GetKey(KeyCode.Escape))
+        {
+            Application.Quit();
         }
     }
 }

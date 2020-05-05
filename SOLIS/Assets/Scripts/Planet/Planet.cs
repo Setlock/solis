@@ -2,7 +2,6 @@
 using Unity.Collections;
 using Unity.Jobs;
 using Unity.Mathematics;
-using UnityEditor;
 using UnityEngine;
 using Unity.Burst;
 
@@ -16,13 +15,14 @@ public class Planet : MonoBehaviour
     public Texture2D planetTexture;
 
     public Texture2D terrainSpritemap;
-    public DefaultAsset tilesetLookupFile, tilesetTriangulationFile;
     public TilesetLookup tilesetLookup;
+    public TextAsset tilesetInformation, tilesetTriangulation;
 
-    public GameObject liquid;
+    public GameObject liquid, treePrefab;
 
     Dictionary<Vector2, TerrainChunk> chunkDictionary = new Dictionary<Vector2, TerrainChunk>();
 
+    Color a, b;
     public void Start()
     {
         Init();
@@ -32,9 +32,11 @@ public class Planet : MonoBehaviour
     /// </summary>
     public void Init()
     {
-        tilesetLookup = new TilesetLookup(AssetDatabase.GetAssetPath(tilesetLookupFile), AssetDatabase.GetAssetPath(tilesetTriangulationFile));
+        System.Random r = new System.Random(planetSettings.planetSeed);
+        a = new Color((float)r.NextDouble(), (float)r.NextDouble(), (float)r.NextDouble());
+        b = new Color((float)r.NextDouble(), (float)r.NextDouble(), (float)r.NextDouble());
+        tilesetLookup = new TilesetLookup(tilesetInformation,tilesetTriangulation);
         planetTexture = new Texture2D(400, 400);
-        CreatePlanetTexture();
     }
     /// <summary>
     /// Generate planet after planet has already been created
@@ -47,6 +49,26 @@ public class Planet : MonoBehaviour
 
         Init();
     }
+    public void CombineMeshes()
+    {
+        GameObject combinedMeshObject = new GameObject("Main Mesh", typeof(MeshRenderer), typeof(MeshFilter));
+        Vector3 pos = combinedMeshObject.transform.position;
+        combinedMeshObject.transform.position = Vector3.zero;
+        CombineInstance[] combine = new CombineInstance[chunkDictionary.Count];
+        int index = 0;
+        foreach(TerrainChunk c in newChunks.Values)
+        {
+            combine[index].mesh = c.GetGameObject().GetComponent<MeshFilter>().sharedMesh;
+            combine[index].transform = c.GetGameObject().GetComponent<MeshFilter>().transform.localToWorldMatrix;
+            c.GetGameObject().SetActive(false);
+            index++;
+        }
+        combinedMeshObject.transform.GetComponent<MeshFilter>().mesh = new Mesh();
+        combinedMeshObject.transform.GetComponent<MeshFilter>().mesh.CombineMeshes(combine, true, true);
+        combinedMeshObject.transform.gameObject.SetActive(true);
+
+        combinedMeshObject.transform.position = pos;
+    }
     /// <summary>
     /// Generate the planets texture based on given values
     /// </summary>
@@ -58,16 +80,15 @@ public class Planet : MonoBehaviour
             for(int j = 0; j < planetTexture.height; j++)
             {
                 float4 pos = new float4((i - planetTexture.width / 2) / planetSettings.planetFeatureSize, (j - planetTexture.height / 2) / planetSettings.planetFeatureSize, 0, planetSettings.planetSeed);
-                float val = PlanetNoise.GetValueAtPosition(pos);
-                /*if(PlanetNoise.GetStateFromPos(pos))
+                if(PlanetNoise.GetStateFromPos(pos))
                 {
                     planetTexture.SetPixel(i,j, planetSettings.terrainColor);
                 }
                 else
                 {
                     planetTexture.SetPixel(i, j, planetSettings.waterColor);
-                }*/
-                planetTexture.SetPixel(i, j, new Color(val, val, val));
+                }
+                //planetTexture.SetPixel(i, j, new Color(val, val, val));
             }
         
         }
@@ -147,11 +168,16 @@ public class Planet : MonoBehaviour
             foreach (TerrainChunk c in newChunks.Values)
             {
                 c.SetTileStatesFromNativeList(chunkBoolMap[index]);
+                c.SetPrefab("tree", treePrefab);
+                Color[] colors = { a, b };
+                c.SetTreeColor(colors);
                 c.GenerateChunk();
 
                 chunkBoolMap[index].Dispose();
                 index++;
             }
+            //CombineMeshes();
+
             jobHandleList.Dispose();
 
             chunkBoolMap.Clear();

@@ -1,6 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using UnityEngine;
+﻿using UnityEngine;
 using UnityEditor;
 
 [CustomEditor(typeof(Planet))]
@@ -13,9 +11,9 @@ public class PlanetEditor : Editor
     {
         base.OnInspectorGUI();
         //If Generate Planet button is pressed then generate planet
-        if (GUILayout.Button("Generate Planet"))
+        if (GUILayout.Button("Generate Texture"))
         {
-            planet.Regenerate();
+            planet.CreatePlanetTexture();
         }
         //Set GUI label to display as generated planet preview texture
         GUILayout.Label(planet.planetTexture);
