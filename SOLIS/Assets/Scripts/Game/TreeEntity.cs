@@ -3,20 +3,14 @@
 public class TreeEntity : Entity
 {
     // Update is called once per frame
-    public Color[] colors;
+    public Color leafColor, baseColor;
     private void Start()
     {
-        SetRandomColors();
+        SetColors();
     }
-    void Update()
+    void SetColors()
     {
-        SetChildLayer();
-    }
-    void SetRandomColors()
-    {
-        for(int i = 0; i < transform.childCount; i++)
-        {
-            transform.GetChild(i).GetComponent<SpriteRenderer>().color = colors[i];
-        }
+        transform.GetChild(0).GetComponent<SpriteRenderer>().color = baseColor;
+        transform.GetChild(1).GetComponent<SpriteRenderer>().color = leafColor;
     }
 }

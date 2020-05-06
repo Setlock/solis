@@ -9,4 +9,9 @@ public class PlanetSettings : ScriptableObject
     public float planetFeatureSize;
     public Color terrainColor;
     public Color waterColor;
+
+    public GameObject tree;
+    public GameObject bush;
+    public Color treeLeafColor, treeBaseColor;
+    public Color bushColor;
 }

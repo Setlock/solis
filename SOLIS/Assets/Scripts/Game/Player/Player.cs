@@ -5,10 +5,6 @@ using UnityEngine;
 
 public class Player : Entity
 {
-    private void Update()
-    {
-        SetLayer();
-    }
     public int moveSpeed = 10;
     void FixedUpdate()
     {

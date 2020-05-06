@@ -18,11 +18,11 @@ public class Planet : MonoBehaviour
     public TilesetLookup tilesetLookup;
     public TextAsset tilesetInformation, tilesetTriangulation;
 
-    public GameObject liquid, treePrefab;
+    public GameObject liquid;
 
     Dictionary<Vector2, TerrainChunk> chunkDictionary = new Dictionary<Vector2, TerrainChunk>();
 
-    Color a, b;
+    System.Random random;
     public void Start()
     {
         Init();
@@ -32,9 +32,7 @@ public class Planet : MonoBehaviour
     /// </summary>
     public void Init()
     {
-        System.Random r = new System.Random(planetSettings.planetSeed);
-        a = new Color((float)r.NextDouble(), (float)r.NextDouble(), (float)r.NextDouble());
-        b = new Color((float)r.NextDouble(), (float)r.NextDouble(), (float)r.NextDouble());
+        random = new System.Random(planetSettings.planetSeed);
         tilesetLookup = new TilesetLookup(tilesetInformation,tilesetTriangulation);
         planetTexture = new Texture2D(400, 400);
     }
@@ -133,7 +131,7 @@ public class Planet : MonoBehaviour
     /// </summary>
     public void CreateChunk(Vector2 chunkCoord, int chunkWidth, int chunkHeight, Vector2 viewChunkCoord, Vector3[] vertices, Vector2[] uv, Color[] defaultColor, Dictionary<Vector2,TileData> tileData)
     {
-        TerrainChunk chunk = new TerrainChunk(terrainMat, transform, vertices, uv, tileData, terrainSpritemap, tilesetLookup, chunkCoord, viewChunkCoord, chunkWidth, chunkHeight, planetSettings.planetFeatureSize, defaultColor, planetSettings.terrainColor);
+        TerrainChunk chunk = new TerrainChunk(this, terrainMat, transform, vertices, uv, tileData, terrainSpritemap, tilesetLookup, chunkCoord, viewChunkCoord, chunkWidth, chunkHeight, planetSettings.planetFeatureSize, defaultColor, planetSettings.terrainColor);
         chunkDictionary.Add(chunkCoord, chunk);
         newChunks.Add(chunkCoord, chunk);
     }
@@ -168,9 +166,8 @@ public class Planet : MonoBehaviour
             foreach (TerrainChunk c in newChunks.Values)
             {
                 c.SetTileStatesFromNativeList(chunkBoolMap[index]);
-                c.SetPrefab("tree", treePrefab);
-                Color[] colors = { a, b };
-                c.SetTreeColor(colors);
+                
+
                 c.GenerateChunk();
 
                 chunkBoolMap[index].Dispose();

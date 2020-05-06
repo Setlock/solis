@@ -15,21 +15,20 @@ public class CharacterFollow : MonoBehaviour
         Vector3 desiredPositon = target.position + offset;
 
         //Linearly interpolate between point and move camera to that position
-        Vector2 lerp = Vector2.Lerp(transform.position, desiredPositon, smoothSpeed);
-        Vector3 smoothedPosition = new Vector3(desiredPositon.x, desiredPositon.y, transform.position.z);
-        transform.position = smoothedPosition;
+        Vector3 smoothedPosition = new Vector3(desiredPositon.x, desiredPositon.y, Camera.main.transform.position.z);
+        Camera.main.transform.position = smoothedPosition;
 
         //If Q key is pressed increase view size to "zoom out"
         //If E key is pressed decrease view size to "zoom in"
         if (Input.GetKey(KeyCode.Q))
         {
-            GetComponent<Camera>().orthographicSize += zoomSpeed;
+            Camera.main.orthographicSize += zoomSpeed;
         }
         if (Input.GetKey(KeyCode.E))
         {
-            if (GetComponent<Camera>().orthographicSize-zoomSpeed >= 1)
+            if (Camera.main.orthographicSize-zoomSpeed >= 1)
             {
-                GetComponent<Camera>().orthographicSize -= zoomSpeed;
+                Camera.main.orthographicSize -= zoomSpeed;
             }
         }
         if (Input.GetKey(KeyCode.Escape))

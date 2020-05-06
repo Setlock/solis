@@ -10,6 +10,7 @@ GameObject:
   m_Component:
   - component: {fileID: 6500024250431131383}
   - component: {fileID: 8491695945164022386}
+  - component: {fileID: 7139600718203566742}
   m_Layer: 0
   m_Name: treeBaseGrey
   m_TagString: Untagged
@@ -49,7 +50,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  - {fileID: 2100000, guid: 3cf9d1fdca2b98944908354be49a2f24, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -81,6 +82,19 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &7139600718203566742
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1090017937100034400}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9e283f3ffb51a6449abea460f0b6c1f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  runOnlyOnce: 1
 --- !u!1 &1366372676367562035
 GameObject:
   m_ObjectHideFlags: 0
@@ -127,7 +141,8 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 6eef014d260f41241bb23497391816b4, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  planet: {fileID: 0}
+  leafColor: {r: 0, g: 0, b: 0, a: 0}
+  baseColor: {r: 0, g: 0, b: 0, a: 0}
 --- !u!61 &3661830390317046671
 BoxCollider2D:
   m_ObjectHideFlags: 0
@@ -164,6 +179,7 @@ GameObject:
   m_Component:
   - component: {fileID: 7665419133754918618}
   - component: {fileID: 2903284993169077365}
+  - component: {fileID: 5715498559051664250}
   m_Layer: 0
   m_Name: treeLeavesGrey
   m_TagString: Untagged
@@ -203,7 +219,7 @@ SpriteRenderer:
   m_RenderingLayerMask: 1
   m_RendererPriority: 0
   m_Materials:
-  - {fileID: 2100000, guid: a97c105638bdf8b4a8650670310a4cd3, type: 2}
+  - {fileID: 2100000, guid: 3cf9d1fdca2b98944908354be49a2f24, type: 2}
   m_StaticBatchInfo:
     firstSubMesh: 0
     subMeshCount: 0
@@ -235,3 +251,16 @@ SpriteRenderer:
   m_WasSpriteAssigned: 1
   m_MaskInteraction: 0
   m_SpriteSortPoint: 0
+--- !u!114 &5715498559051664250
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 6892723748354071119}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9e283f3ffb51a6449abea460f0b6c1f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  runOnlyOnce: 1

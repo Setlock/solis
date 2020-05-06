@@ -159,8 +159,6 @@ MonoBehaviour:
   tilesetTriangulation: {fileID: 4900000, guid: 8a06bdeb42ee5684ba9165ef71d39fc7,
     type: 3}
   liquid: {fileID: 1282820078}
-  treePrefab: {fileID: 1366372676367562035, guid: 127bfd93f82988346b4eb74dc296e31e,
-    type: 3}
 --- !u!4 &135525412
 Transform:
   m_ObjectHideFlags: 0
@@ -188,8 +186,10 @@ GameObject:
   - component: {fileID: 363703297}
   - component: {fileID: 363703298}
   - component: {fileID: 363703299}
+  - component: {fileID: 363703300}
+  - component: {fileID: 363703301}
   m_Layer: 0
-  m_Name: playerSprite
+  m_Name: Player
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -318,7 +318,36 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8141b43ccfd539c488932f23e1c30411, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  moveSpeed: 200
+  moveSpeed: 300
+--- !u!114 &363703300
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 363703294}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 7f03e44204cf9c04fbfff3eeabd3d0aa, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  target: {fileID: 363703296}
+  smoothSpeed: 0.125
+  offset: {x: 0, y: 0, z: 0}
+  zoomSpeed: 1
+--- !u!114 &363703301
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 363703294}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 9e283f3ffb51a6449abea460f0b6c1f4, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  runOnlyOnce: 0
 --- !u!1 &519420028
 GameObject:
   m_ObjectHideFlags: 0
@@ -331,7 +360,6 @@ GameObject:
   - component: {fileID: 519420031}
   - component: {fileID: 519420029}
   - component: {fileID: 519420030}
-  - component: {fileID: 519420033}
   m_Layer: 0
   m_Name: Main Camera
   m_TagString: MainCamera
@@ -437,22 +465,6 @@ Transform:
   m_Father: {fileID: 0}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
---- !u!114 &519420033
-MonoBehaviour:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 519420028}
-  m_Enabled: 1
-  m_EditorHideFlags: 0
-  m_Script: {fileID: 11500000, guid: 7f03e44204cf9c04fbfff3eeabd3d0aa, type: 3}
-  m_Name: 
-  m_EditorClassIdentifier: 
-  target: {fileID: 363703296}
-  smoothSpeed: 0.125
-  offset: {x: 0, y: 0, z: 0}
-  zoomSpeed: 1
 --- !u!28 &836901755
 Texture2D:
   m_ObjectHideFlags: 0

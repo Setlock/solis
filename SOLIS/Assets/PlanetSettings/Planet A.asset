@@ -14,5 +14,10 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   planetSeed: 0
   planetFeatureSize: 100
-  terrainColor: {r: 0.3372549, g: 0.78431374, b: 0.43525302, a: 1}
+  terrainColor: {r: 0.735849, g: 0.6197755, b: 0.5310609, a: 1}
   waterColor: {r: 0, g: 0, b: 0, a: 0}
+  tree: {fileID: 1366372676367562035, guid: 127bfd93f82988346b4eb74dc296e31e, type: 3}
+  bush: {fileID: 1381081234869524441, guid: febbf38b48fc7c3439683569b39eda12, type: 3}
+  treeLeafColor: {r: 0.8490566, g: 0.778519, b: 0.3964934, a: 1}
+  treeBaseColor: {r: 0.7075472, g: 0.32373622, b: 0.67475724, a: 1}
+  bushColor: {r: 0.22745097, g: 0.7921569, b: 0.7072692, a: 1}
