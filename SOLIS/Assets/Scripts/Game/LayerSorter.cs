@@ -15,7 +15,7 @@ public class LayerSorter : MonoBehaviour
 
     void LateUpdate()
     {
-        myRenderer.sortingOrder = (int)((transform.position.y - myRenderer.bounds.size.y / 2f)*-1000);
+        myRenderer.sortingOrder = (int)((transform.position.y - myRenderer.bounds.size.y / 2f)*-100);
         if (runOnlyOnce)
         {
             Destroy(this);

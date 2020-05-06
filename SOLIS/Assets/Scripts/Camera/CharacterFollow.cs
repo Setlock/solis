@@ -1,7 +1,6 @@
-﻿using System.Collections;
-using System.Collections.Generic;
-using System.Security.Cryptography;
+﻿using System;
 using UnityEngine;
+using UnityEngine.Experimental.Rendering.Universal;
 
 public class CharacterFollow : MonoBehaviour
 {
@@ -9,31 +8,40 @@ public class CharacterFollow : MonoBehaviour
     public float smoothSpeed = 0.125f;
     public Vector3 offset;
     public float zoomSpeed = 1;
+    new Camera camera;
+    private void Start()
+    {
+        camera = GetComponent<Camera>();
+    }
     private void LateUpdate()
     {
-        //Calculate position to travel to
-        Vector3 desiredPositon = target.position + offset;
+        Vector3 targetPosition = target.position + offset;
 
-        //Linearly interpolate between point and move camera to that position
-        Vector3 smoothedPosition = new Vector3(desiredPositon.x, desiredPositon.y, Camera.main.transform.position.z);
-        Camera.main.transform.position = smoothedPosition;
+        Vector3 finalPosition = new Vector3(targetPosition.x, targetPosition.y, camera.transform.position.z);
+
+        camera.transform.position = finalPosition;
 
         //If Q key is pressed increase view size to "zoom out"
         //If E key is pressed decrease view size to "zoom in"
         if (Input.GetKey(KeyCode.Q))
         {
-            Camera.main.orthographicSize += zoomSpeed;
+            camera.orthographicSize += zoomSpeed;
         }
         if (Input.GetKey(KeyCode.E))
         {
-            if (Camera.main.orthographicSize-zoomSpeed >= 1)
+            if (camera.orthographicSize-zoomSpeed >= 1)
             {
-                Camera.main.orthographicSize -= zoomSpeed;
+                camera.orthographicSize -= zoomSpeed;
             }
         }
         if (Input.GetKey(KeyCode.Escape))
         {
             Application.Quit();
         }
+    }
+    private Vector3 PixelPerfectClamp(Vector3 vector, float pixelsPerUnit)
+    {
+        Vector3 vectorInPixels = new Vector3(Mathf.RoundToInt(vector.x * pixelsPerUnit)/pixelsPerUnit, Mathf.RoundToInt(vector.y * pixelsPerUnit)/pixelsPerUnit, vector.z);
+        return vectorInPixels;
     }
 }
