@@ -5,7 +5,6 @@ using UnityEngine.Experimental.Rendering.Universal;
 public class CharacterFollow : MonoBehaviour
 {
     public Transform target;
-    public float smoothSpeed = 0.125f;
     public Vector3 offset;
     public float zoomSpeed = 1;
     new Camera camera;
@@ -21,19 +20,6 @@ public class CharacterFollow : MonoBehaviour
 
         camera.transform.position = finalPosition;
 
-        //If Q key is pressed increase view size to "zoom out"
-        //If E key is pressed decrease view size to "zoom in"
-        if (Input.GetKey(KeyCode.Q))
-        {
-            camera.orthographicSize += zoomSpeed;
-        }
-        if (Input.GetKey(KeyCode.E))
-        {
-            if (camera.orthographicSize-zoomSpeed >= 1)
-            {
-                camera.orthographicSize -= zoomSpeed;
-            }
-        }
         if (Input.GetKey(KeyCode.Escape))
         {
             Application.Quit();

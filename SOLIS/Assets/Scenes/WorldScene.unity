@@ -463,7 +463,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   target: {fileID: 363703296}
-  smoothSpeed: 0.125
   offset: {x: 0, y: 0, z: 0}
   zoomSpeed: 1
 --- !u!114 &519420034
