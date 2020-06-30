@@ -1,77 +1,44 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
-using UnityEngine.Events;
 
 public class Inventory
 {
-    public int maxSlots;
-    public Dictionary<int, InventorySlot> inventorySlots = new Dictionary<int, InventorySlot>();
-    public Inventory(int maxSlots)
+    public InventorySlot heldSlot;
+    public List<InventorySlot> inventorySlots = new List<InventorySlot>();
+    public Inventory(int numSlots)
     {
-        for(int i = 0; i < maxSlots; i++)
+        heldSlot = new InventorySlot();
+        for(int i = 0; i < numSlots; i++)
         {
-            InventorySlot inventorySlot = new InventorySlot(i);
-            inventorySlots.Add(i, inventorySlot);
+            InventorySlot slot = new InventorySlot(new Wood(), 10);
+            inventorySlots.Add(slot);
         }
     }
-    public void UpdateSlots()
+    public void InventorySlotClick(InventorySlot slot, int key)
     {
-        foreach(InventorySlot slot in inventorySlots.Values)
+        if (key == 0)
         {
-            slot.Update();
-        }
-    }
-    public bool AddItem(InventorySlot slot, Item item, int amount)
-    {
-        bool didAdd = false;
-        if (slot.ItemMatch(item))
-        {
-            didAdd = slot.AddAmount(amount);
-        }
-        else
-        {
-            didAdd = false;
-        }
-        return didAdd;
-    }
-    public bool RemoveItem(InventorySlot slot, Item item, int amount)
-    {
-        bool didRemove = false;
-        if (slot.ItemMatch(item))
-        {
-            didRemove = slot.RemoveAmount(amount);
-            if (didRemove)
+            if (heldSlot.GetItem() != null)
             {
-                UpdateSlots();
+                if (slot.GetItem() != null && slot.GetItem().GetName() == heldSlot.GetItem().GetName())
+                {
+                    slot.AddAmount(heldSlot.GetAmount());
+                    heldSlot.SetAmount(0);
+                }
+                else if(slot.GetItem() == null)
+                {
+                    slot.SetItem(heldSlot.GetItem());
+                    slot.SetAmount(heldSlot.GetAmount());
+                    heldSlot.SetAmount(0);
+                }
             }
-        }
-        else
-        {
-            didRemove = false;
-        }
-
-        return didRemove;
-    }
-    public Item GetItemInSlot(InventorySlot slot)
-    {
-        return slot.GetItem();
-    }
-    public int GetAmountInSlot(InventorySlot slot)
-    {
-        return slot.GetAmount();
-    }
-    public InventorySlot GetInventorySlot(int ID)
-    {
-        return inventorySlots[ID];
-    }
-    public void IncreaseCapacity(int amount)
-    {
-        for(int i = 0; i < amount; i++)
-        {
-            int ID = inventorySlots.Count + i;
-            InventorySlot inventorySlot = new InventorySlot(ID);
-            inventorySlots.Add(ID,inventorySlot);
+            else
+            {
+                heldSlot.SetItem(slot.GetItem());
+                heldSlot.SetAmount(slot.GetAmount());
+                slot.SetAmount(0);
+            }
         }
     }
 }

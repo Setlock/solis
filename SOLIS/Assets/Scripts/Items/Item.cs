@@ -5,18 +5,18 @@ using UnityEngine;
 public class Item
 {
     string name;
-    int maxStack;
-    public Item(string name, int maxStack)
+    int maxAmt;
+    public Item(string name, int maxAmt)
     {
         this.name = name;
-        this.maxStack = maxStack;
+        this.maxAmt = maxAmt;
     }
     public string GetName()
     {
         return name;
     }
-    public int GetMaxStack()
+    public int GetMaxAmount()
     {
-        return maxStack;
+        return maxAmt;
     }
 }

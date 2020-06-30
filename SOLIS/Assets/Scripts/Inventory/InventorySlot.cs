@@ -4,58 +4,17 @@ using UnityEngine;
 
 public class InventorySlot
 {
-    int ID;
     Item item;
-    int amount;
-    public InventorySlot(int ID)
+    int amt;
+    public InventorySlot(Item item, int amt)
     {
-        this.ID = ID;
-        item = null;
-        amount = 0;
-    }
-    public InventorySlot(int ID, Item item, int amount)
-    {
-        this.ID = ID;
         this.item = item;
-        this.amount = amount;
+        this.amt = amt;
     }
-    public void Update()
+    public InventorySlot()
     {
-        if (IsEmpty())
-        {
-            item = null;
-            amount = 0;
-        }
-    }
-    public bool IsEmpty()
-    {
-        return amount <= 0 || item == null;
-    }
-    public bool ItemMatch(Item item)
-    {
-        return this.item.GetName().Equals(item.GetName());
-    }
-    public bool CanRemove(int sub)
-    {
-        return amount - sub >= 0;
-    }
-    public bool RemoveAmount(int sub)
-    {
-        if(this.amount-sub >= 0)
-        {
-            this.amount -= sub;
-            return true;
-        }
-        return false;
-    }
-    public bool AddAmount(int add)
-    {
-        if(this.amount + add <= item.GetMaxStack())
-        {
-            this.amount += add;
-            return true;
-        }
-        return false;
+        this.item = null;
+        this.amt = 0;
     }
     public void SetItem(Item item)
     {
@@ -63,14 +22,30 @@ public class InventorySlot
     }
     public void SetAmount(int amt)
     {
-        this.amount = amt;
+        this.amt = amt;
+        if(this.amt == 0)
+        {
+            item = null;
+        }
     }
-    public Item GetItem()
+    public void AddAmount(int amt)
     {
-        return item;
+        this.amt += amt;
+    }
+    public void SubtractAmount(int amt)
+    {
+        this.amt -= amt;
+        if(this.amt == 0)
+        {
+            item = null;
+        }
     }
     public int GetAmount()
     {
-        return amount;
+        return this.amt;
+    }
+    public Item GetItem()
+    {
+        return this.item;
     }
 }
