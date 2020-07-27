@@ -4,19 +4,23 @@ using UnityEngine;
 
 public class Item
 {
-    string name;
+    ItemType type;
     int maxAmt;
-    public Item(string name, int maxAmt)
+    public Item(ItemType type, int maxAmt)
     {
-        this.name = name;
+        this.type = type;
         this.maxAmt = maxAmt;
     }
-    public string GetName()
+    public ItemType GetItemType()
     {
-        return name;
+        return type;
     }
     public int GetMaxAmount()
     {
         return maxAmt;
     }
+}
+public enum ItemType
+{
+    ore,wood
 }

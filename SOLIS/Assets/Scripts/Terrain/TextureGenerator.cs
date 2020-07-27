@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using Unity.Mathematics;
 using UnityEngine;
@@ -13,6 +14,8 @@ public class TextureGenerator : MonoBehaviour
     GameObject prefabObject;
 
     public Color landColor, waterColor;
+    public int seed;
+    public int planetWidth;
     public int numLayers;
     public float noiseCutoff, featureSize, recede, baseRoughness, roughness, persistence, strength;
     // Start is called before the first frame update
@@ -20,32 +23,28 @@ public class TextureGenerator : MonoBehaviour
     {
         /*prefabObject = Instantiate(prefab);
         prefabObject.transform.position = spherePosition.transform.position;
-        GenerateCubeMap();*/
+        prefabObject.transform.SetParent(spherePosition.transform, true);
+        GenerateMap();*/
     }
-    public void Update()
+    public float GetNoise(float2 samplePos)
     {
-        
-    }
-    public void OnValidate()
-    {
-        if (Application.isPlaying)
-        {
-            if (GUI.changed)
-            {
-                GenerateCubeMap();
-            }
-        }
-    }
-    public float GetNoise(float3 samplePos)
-    {
-        samplePos /= featureSize;
+        float twoPi = math.PI * 2;
+
+        float xVal = math.sin(samplePos.y * twoPi / (float)planetWidth) / twoPi * (float)planetWidth;
+        float yVal = math.cos(samplePos.y * twoPi / (float)planetWidth) / twoPi * (float)planetWidth;
+        float zVal = math.sin(samplePos.x * twoPi / (float)planetWidth) / twoPi * (float)planetWidth;
+        float wVal = math.cos(samplePos.x * twoPi / (float)planetWidth) / twoPi * (float)planetWidth;
+
+        float4 samplePosition = new float4(xVal, yVal, zVal, wVal);
+        samplePosition += seed;
+
         float noiseValue = 0;
         float frequency = baseRoughness;
         float amplitude = 1;
 
         for (int i = 0; i < numLayers; i++)
         {
-            float v = noise.snoise(samplePos * frequency);
+            float v = noise.snoise(samplePosition / featureSize * frequency);
             noiseValue += (v + 1) * 0.5f * amplitude;
             frequency *= roughness;
             amplitude *= persistence;
@@ -63,84 +62,29 @@ public class TextureGenerator : MonoBehaviour
         }
         return waterColor;
     }
-    public void GenerateCubeMap()
+    public void GenerateMap()
     {
-        int dim = 100;
-        Texture2D finalMap = new Texture2D(dim*4,dim*3);
+        Texture2D finalMap = new Texture2D(planetWidth, planetWidth);
+        for(int i = 0; i < planetWidth; i++)
+        {
+            for(int j = 0; j < planetWidth; j++)
+            {
+                finalMap.SetPixel(i, j, GetColor(GetNoise(new float2(i, j))));
+            }
+        }
 
-		//Z STATIC
-		for (int y = 0; y < dim; y++)
-		{
-			for (int x = 0; x < dim * 2; x++)
-			{
-				//Generates FRONT
-				if (x < dim)
-				{
-					int2 pixelPos = new int2(dim + x, dim + y);
-					float3 samplePos = new float3(x, y, 0);
-					float noiseVal = GetNoise(samplePos);
-                    finalMap.SetPixel(pixelPos.x, pixelPos.y, GetColor(noiseVal));
-				}
-				//Generates BACK
-				else
-				{
-					int2 pixelPos = new int2(dim*3 + (x-dim), dim + y);
-					float3 samplePos = new float3(dim - (x - dim), y, dim);
-                    float noiseVal = GetNoise(samplePos);
-					finalMap.SetPixel(pixelPos.x, pixelPos.y, GetColor(noiseVal));
-				}
-			}
-		}
-		//X STATIC
-		for (int y = 0; y < dim; y++)
-		{
-			for (int x = 0; x < dim * 2; x++)
-			{
-				//Generates LEFT
-				if (x < dim)
-				{
-					int2 pixelPos = new int2(x, dim + y);
-					float3 samplePos = new float3(0, y, dim - x);
-					float noiseVal = GetNoise(samplePos);
-                    finalMap.SetPixel(pixelPos.x, pixelPos.y, GetColor(noiseVal));
-				}
-				//Generates RIGHT
-				else
-				{
-					int2 pixelPos = new int2(dim*2 + (x-dim), dim + y);
-					float3 samplePos = new float3(dim, y, x - dim);
-					float noiseVal = GetNoise(samplePos);
-                    finalMap.SetPixel(pixelPos.x, pixelPos.y, GetColor(noiseVal));
-				}
-			}
-		}
-		//Y STATIC
-		for (int y = 0; y < dim * 2; y++)
-		{
-			for (int x = 0; x < dim; x++)
-			{
-				//Generates TOP
-				if (y < dim)
-				{
-					int2 pixelPos = new int2(dim + x, y);
-					float3 samplePos = new float3(x, 0, dim - y);
-					float noiseVal = GetNoise(samplePos);
-                    finalMap.SetPixel(pixelPos.x, pixelPos.y, GetColor(noiseVal));
-				}
-				//Generates BOTTOM
-				else
-				{
-					int2 pixelPos = new int2(dim + x, dim*2 + (y-dim));
-					float3 samplePos = new float3(x, dim, y - dim);
-					float noiseVal = GetNoise(samplePos);
-                    finalMap.SetPixel(pixelPos.x, pixelPos.y, GetColor(noiseVal));
-				}
-			}
-		}
+        finalMap.SetPixel(planetWidth/2, planetWidth/2, Color.black);
+        finalMap.SetPixel(planetWidth / 2 - 1, planetWidth / 2, Color.black);
+        finalMap.SetPixel(planetWidth / 2, planetWidth / 2 - 1, Color.black);
+        finalMap.SetPixel(planetWidth / 2 + 1, planetWidth / 2, Color.black);
+        finalMap.SetPixel(planetWidth / 2, planetWidth / 2 + 1, Color.black);
+
+        finalMap.filterMode = FilterMode.Point;
+        finalMap.wrapMode = TextureWrapMode.Clamp;
 		finalMap.Apply();
 
         Material newMat = new Material(refMaterial);
-        newMat.mainTexture = ConvertToEquirectangular(finalMap, 1000, 1000);
+        newMat.mainTexture = finalMap;
         prefabObject.GetComponent<MeshRenderer>().material = newMat;
     }
     public static Texture2D ConvertToEquirectangular(Texture2D sourceTexture, int outputWidth, int outputHeight)
@@ -150,8 +94,8 @@ public class TextureGenerator : MonoBehaviour
         float phi, theta; //Polar coordinates
         int cubeFaceWidth, cubeFaceHeight;
 
-        cubeFaceWidth = sourceTexture.width / 4; //4 horizontal faces
-        cubeFaceHeight = sourceTexture.height / 3; //3 vertical faces
+        cubeFaceWidth = sourceTexture.width; //4 horizontal faces
+        cubeFaceHeight = sourceTexture.height; //3 vertical faces
 
 
         for (int j = 0; j < equiTexture.height; j++)

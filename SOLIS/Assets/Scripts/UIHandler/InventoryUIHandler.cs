@@ -1,13 +1,39 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using TMPro;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class InventoryUIHandler : MonoBehaviour
 {
+    public GameObject canvas;
+    public GameObject slotPrefab;
     public GameObject heldSlot;
-    public List<GameObject> slotUI = new List<GameObject>();
+
+    public List<GameObject> slotUI;
     Inventory refInventory;
+
+    public Vector2 startPosition;
+    public Vector2 dimensions;
+    public Vector2 spacing;
+
+    private void Start()
+    {
+        slotUI = new List<GameObject>();
+
+        for(int j = 0; j < (int)dimensions.y; j++)
+        {
+            for(int i = 0; i < (int)dimensions.x; i++)
+            {
+                Vector3 position = new Vector3(startPosition.x + i * spacing.x, startPosition.y - j * spacing.y, 0);
+                GameObject slotObject = Instantiate(slotPrefab, canvas.transform);
+                slotObject.transform.position = position;
+                slotObject.transform.SetAsFirstSibling();
+                slotUI.Add(slotObject);
+            }
+        }
+
+        heldSlot.transform.SetAsLastSibling();
+    }
     void Update()
     {
         if (Input.GetMouseButtonDown(0))
@@ -31,20 +57,24 @@ public class InventoryUIHandler : MonoBehaviour
         {
             if (refInventory.inventorySlots[i].GetItem() != null)
             {
-                slotUI[i].transform.GetChild(0).GetComponent<TextMeshProUGUI>().text = refInventory.inventorySlots[i].GetItem().GetName() + " " + refInventory.inventorySlots[i].GetAmount();
+                slotUI[i].transform.GetChild(0).gameObject.SetActive(true);
+                slotUI[i].transform.GetChild(1).GetComponent<TextMeshProUGUI>().text = refInventory.inventorySlots[i].GetItem().GetItemType().ToString() + " x"+refInventory.inventorySlots[i].GetAmount();
             }
             else
             {
-                slotUI[i].transform.GetChild(0).GetComponent<TextMeshProUGUI>().text = "";
+                slotUI[i].transform.GetChild(0).gameObject.SetActive(false);
+                slotUI[i].transform.GetChild(1).GetComponent<TextMeshProUGUI>().text = "";
             }
         }
         if(refInventory.heldSlot.GetItem() != null)
         {
-            heldSlot.transform.GetChild(0).GetComponent<TextMeshProUGUI>().text = refInventory.heldSlot.GetItem().GetName() + " " + refInventory.heldSlot.GetAmount();
+            heldSlot.transform.GetChild(0).gameObject.SetActive(true);
+            heldSlot.transform.GetChild(1).GetComponent<TextMeshProUGUI>().text = ""+refInventory.heldSlot.GetAmount();
         }
         else
         {
-            heldSlot.transform.GetChild(0).GetComponent<TextMeshProUGUI>().text = "";
+            heldSlot.transform.GetChild(0).gameObject.SetActive(false);
+            heldSlot.transform.GetChild(1).GetComponent<TextMeshProUGUI>().text = "";
         }
         heldSlot.transform.position = Input.mousePosition;
     }

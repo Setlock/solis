@@ -11,7 +11,7 @@ public class Inventory
         heldSlot = new InventorySlot();
         for(int i = 0; i < numSlots; i++)
         {
-            InventorySlot slot = new InventorySlot(new Wood(), 10);
+            InventorySlot slot = new InventorySlot(new Item(ItemType.wood, 100), 125);
             inventorySlots.Add(slot);
         }
     }
@@ -21,7 +21,7 @@ public class Inventory
         {
             if (heldSlot.GetItem() != null)
             {
-                if (slot.GetItem() != null && slot.GetItem().GetName() == heldSlot.GetItem().GetName())
+                if (slot.GetItem() != null && slot.GetItem().GetItemType() == heldSlot.GetItem().GetItemType())
                 {
                     slot.AddAmount(heldSlot.GetAmount());
                     heldSlot.SetAmount(0);
